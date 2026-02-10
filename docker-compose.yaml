@@ -1,5 +1,6 @@
 services:
   klog-dashboard:
+    image: ghcr.io/muecahit94/klog-dashboard:latest
     build: .
     container_name: klog-dashboard
     ports:
