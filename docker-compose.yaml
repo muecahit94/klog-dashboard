@@ -1,0 +1,9 @@
+services:
+  klog-dashboard:
+    build: .
+    container_name: klog-dashboard
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    labels:
+      - "com.docker.compose.project=klog-dashboard"
