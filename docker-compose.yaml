@@ -9,6 +9,6 @@ services:
     environment:
       - KLOG_DATA_DIR=/data
     volumes:
-      - /Users/muecahit/Dropbox/Allgemeines/Arbeitsunterlagen/Whizus/timetracking:/data
+      - ./data:/data
     labels:
       - "com.docker.compose.project=klog-dashboard"
