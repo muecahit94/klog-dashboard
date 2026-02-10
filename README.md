@@ -140,4 +140,4 @@ klog-dashboard/
 
 ## 📄 License
 
-MIT
+[MIT](LICENSE)
