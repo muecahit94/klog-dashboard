@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/muecahit94/klog-dashboard/compare/v1.0.0...v1.0.1) (2026-02-10)
+
+
+### Bug Fixes
+
+* Integrate Docker image build and push directly into the release-please workflow ([41c8fed](https://github.com/muecahit94/klog-dashboard/commit/41c8fed100893bf35b21a810df1bf834c1ed3036))
+
 ## 1.0.0 (2026-02-10)
 
 
