@@ -173,6 +173,40 @@ export default function FileImport({ onImport, hasData }) {
         onImport(records);
     }, [onImport]);
 
+    // Compact mode when data is already loaded
+    if (hasData) {
+        return (
+            <div className="animate-fade-in">
+                <div
+                    className={`file-import-compact ${isDragOver ? 'drag-over' : ''}`}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                >
+                    <div className="file-import-compact-left">
+                        {importStatus && (
+                            <span className={importStatus.type === 'error' ? 'text-danger' : ''}>
+                                {importStatus.type === 'success' ? '✓' : '⚠'} {importStatus.message}
+                            </span>
+                        )}
+                        {!importStatus && <span>📂 Drop files to import more</span>}
+                    </div>
+                    <button className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>
+                        + Add Files
+                    </button>
+                </div>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".klg,.txt,.klog"
+                    onChange={handleFileSelect}
+                    style={{ display: 'none' }}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="animate-fade-in">
             <div
@@ -184,7 +218,7 @@ export default function FileImport({ onImport, hasData }) {
             >
                 <span className="file-import-icon">📂</span>
                 <div className="file-import-title">
-                    {hasData ? 'Import more klog files' : 'Drop your klog files here'}
+                    Drop your klog files here
                 </div>
                 <div className="file-import-subtitle">
                     Supports .klg and .txt files • Drag files or entire folders
@@ -193,11 +227,9 @@ export default function FileImport({ onImport, hasData }) {
                     <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
                         📄 Select Files
                     </button>
-                    {!hasData && (
-                        <button className="btn btn-secondary" onClick={handleDemoData}>
-                            ✨ Load Demo Data
-                        </button>
-                    )}
+                    <button className="btn btn-secondary" onClick={handleDemoData}>
+                        ✨ Load Demo Data
+                    </button>
                 </div>
                 {importStatus && (
                     <div className={`import-status ${importStatus.type === 'error' ? 'text-danger' : ''}`}

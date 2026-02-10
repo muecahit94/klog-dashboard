@@ -22,7 +22,7 @@ export default function Home() {
     });
     const [showExportMenu, setShowExportMenu] = useState(false);
 
-    // Load from localStorage on mount
+    // Load from localStorage on mount + set default date filter to current month
     useEffect(() => {
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
@@ -35,6 +35,13 @@ export default function Home() {
         } catch (e) {
             // ignore
         }
+
+        // Default to current month
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        setFilters((prev) => ({ ...prev, dateFrom: fmt(monthStart), dateTo: fmt(monthEnd) }));
     }, []);
 
     // Persist to localStorage

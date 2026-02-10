@@ -71,7 +71,7 @@ The dashboard watches a configurable directory for `.klg`, `.klog`, and `.txt` f
 | **Docker** | Mount a volume to `/data` (see docker-compose.yaml) |
 | **Default** | `./public/data` (if `KLOG_DATA_DIR` is not set) |
 
-> **macOS Note**: If pointing to a Dropbox or iCloud folder, your terminal app may need **Full Disk Access** (System Settings → Privacy & Security → Full Disk Access).
+> **macOS Note**: If pointing to a folder, your terminal app may need **Full Disk Access** (System Settings → Privacy & Security → Full Disk Access).
 
 ## 📝 klog File Format
 
