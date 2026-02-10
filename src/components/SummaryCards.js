@@ -1,6 +1,6 @@
 'use client';
 
-import { minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
+import { minutesToDecimalHours } from '@/lib/klogParser';
 
 export default function SummaryCards({ records }) {
     // Calculate from entries (not r.totalMinutes) so filtered records show correct totals
@@ -26,7 +26,7 @@ export default function SummaryCards({ records }) {
     const cards = [
         {
             icon: '⏱️',
-            value: totalHours.toFixed(1) + 'h',
+            value: totalHours.toFixed(2) + 'h',
             label: 'Total Hours',
         },
         {
@@ -36,7 +36,7 @@ export default function SummaryCards({ records }) {
         },
         {
             icon: '📊',
-            value: formatMinutes(Math.round(dailyAvg)),
+            value: minutesToDecimalHours(dailyAvg).toFixed(2) + 'h',
             label: 'Daily Average',
         },
         {
@@ -51,7 +51,7 @@ export default function SummaryCards({ records }) {
         },
         {
             icon: shouldTotalMin > 0 ? (diff >= 0 ? '✅' : '⚠️') : '🎯',
-            value: shouldTotalMin > 0 ? (diff >= 0 ? '+' : '') + formatMinutes(diff) : '—',
+            value: shouldTotalMin > 0 ? (diff >= 0 ? '+' : '') + minutesToDecimalHours(diff).toFixed(2) + 'h' : '—',
             label: 'Should vs Actual',
         },
     ];

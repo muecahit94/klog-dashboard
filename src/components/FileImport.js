@@ -7,15 +7,89 @@ export default function FileImport({ onImport, hasData }) {
     const [isDragOver, setIsDragOver] = useState(false);
     const [importStatus, setImportStatus] = useState(null);
     const fileInputRef = useRef(null);
-    const folderInputRef = useRef(null);
 
-    // React does not support webkitdirectory as a JSX prop — set it via ref
+    // State for tracking last modified times of auto-imported files
+    const [knownFiles, setKnownFiles] = useState({});
+
+    // Poll for updates from /files.json
     useEffect(() => {
-        if (folderInputRef.current) {
-            folderInputRef.current.setAttribute('webkitdirectory', '');
-            folderInputRef.current.setAttribute('directory', '');
-        }
-    }, []);
+        let isMounted = true;
+
+        const checkUpdates = async () => {
+            try {
+                const res = await fetch('/files.json', { cache: 'no-store' });
+                if (!res.ok) return;
+
+                const fileList = await res.json();
+                if (!Array.isArray(fileList)) return;
+
+                // Determine which files need updating
+                const filesToFetch = [];
+                const newKnownFiles = { ...knownFiles };
+                let hasChanges = false;
+
+                for (const fileInfo of fileList) {
+                    // Handle both old format (string) and new format (object)
+                    const path = typeof fileInfo === 'string' ? fileInfo : fileInfo.path;
+                    const name = typeof fileInfo === 'string' ? path.split('/').pop() : fileInfo.name;
+                    const mtime = typeof fileInfo === 'string' ? 0 : (fileInfo.mtime || 0);
+
+                    // If file is new or modified since last check
+                    if (!knownFiles[name] || knownFiles[name] < mtime) {
+                        filesToFetch.push({ path, name, mtime });
+                        newKnownFiles[name] = mtime;
+                        hasChanges = true;
+                    }
+                }
+
+                if (filesToFetch.length > 0) {
+                    console.log(`Detected changes in ${filesToFetch.length} files. Reloading...`);
+                    const loadedFiles = [];
+                    for (const f of filesToFetch) {
+                        try {
+                            const fileRes = await fetch(f.path, { cache: 'no-store' });
+                            if (!fileRes.ok) continue;
+                            const content = await fileRes.text();
+                            loadedFiles.push({ name: f.name, content });
+                        } catch (err) {
+                            console.error(`Failed to load file ${f.path}:`, err);
+                        }
+                    }
+
+                    if (loadedFiles.length > 0) {
+                        const records = parseMultipleKlogFiles(loadedFiles);
+                        // replaceFiles option tells handleImport to remove old records for these files
+                        onImport(records, { replaceFiles: loadedFiles.map(f => f.name) });
+
+                        // Update status only if it's the first load or significant update
+                        if (Object.keys(knownFiles).length === 0) {
+                            setImportStatus({
+                                type: 'success',
+                                message: `Auto-imported ${records.length} records from monitored folder`,
+                            });
+                        }
+                    }
+                }
+
+                if (hasChanges && isMounted) {
+                    setKnownFiles(newKnownFiles);
+                }
+
+            } catch (err) {
+                // Silent fail for polling errors
+                console.debug('Polling error:', err);
+            }
+        };
+
+        // Check immediately and then every 2 seconds
+        checkUpdates();
+        const interval = setInterval(checkUpdates, 2000);
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
+    }, [onImport, knownFiles]);
 
     const processFiles = useCallback(async (fileList) => {
         const files = [];
@@ -36,6 +110,7 @@ export default function FileImport({ onImport, hasData }) {
         }
 
         const records = parseMultipleKlogFiles(files);
+
         setImportStatus({
             type: 'success',
             message: `Imported ${records.length} records from ${files.length} file${files.length > 1 ? 's' : ''}`,
@@ -81,7 +156,9 @@ export default function FileImport({ onImport, hasData }) {
 
     const handleFileSelect = useCallback((e) => {
         if (e.target.files?.length) {
-            processFiles(e.target.files);
+            // Convert to array immediately because e.target.value = '' might clear the FileList
+            const files = Array.from(e.target.files);
+            processFiles(files);
         }
         // Reset the input so the same file/folder can be re-selected
         e.target.value = '';
@@ -117,9 +194,6 @@ export default function FileImport({ onImport, hasData }) {
                     <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
                         📄 Select Files
                     </button>
-                    <button className="btn btn-secondary" onClick={() => folderInputRef.current?.click()}>
-                        📁 Select Folder
-                    </button>
                     {!hasData && (
                         <button className="btn btn-secondary" onClick={handleDemoData}>
                             ✨ Load Demo Data
@@ -138,13 +212,6 @@ export default function FileImport({ onImport, hasData }) {
                 type="file"
                 multiple
                 accept=".klg,.txt,.klog"
-                onChange={handleFileSelect}
-                style={{ display: 'none' }}
-            />
-            <input
-                ref={folderInputRef}
-                type="file"
-                multiple
                 onChange={handleFileSelect}
                 style={{ display: 'none' }}
             />

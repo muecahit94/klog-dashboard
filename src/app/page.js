@@ -63,12 +63,20 @@ export default function Home() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const handleImport = useCallback((newRecords) => {
+    const handleImport = useCallback((newRecords, opts = {}) => {
         setRecords((prev) => {
-            // Merge and deduplicate by date + summary
-            const existingKeys = new Set(prev.map(r => `${r.date}|${r.summary}`));
-            const unique = newRecords.filter(r => !existingKeys.has(`${r.date}|${r.summary}`));
-            const merged = [...prev, ...unique].sort((a, b) => a.date.localeCompare(b.date));
+            let next = [...prev];
+
+            // If specific files are being updated, remove their old records first
+            if (opts.replaceFiles && opts.replaceFiles.length > 0) {
+                const filesToRemove = new Set(opts.replaceFiles);
+                next = next.filter(r => !filesToRemove.has(r.fileName));
+            }
+
+            // Merge and deduplicate by date + summary + filename
+            const existingKeys = new Set(next.map(r => `${r.date}|${r.summary}|${r.fileName}`));
+            const unique = newRecords.filter(r => !existingKeys.has(`${r.date}|${r.summary}|${r.fileName}`));
+            const merged = [...next, ...unique].sort((a, b) => a.date.localeCompare(b.date));
             return merged;
         });
     }, []);

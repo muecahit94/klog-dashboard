@@ -5,5 +5,7 @@ services:
     ports:
       - "3000:80"
     restart: unless-stopped
+    volumes:
+      - ./public/data:/usr/share/nginx/html/data
     labels:
       - "com.docker.compose.project=klog-dashboard"

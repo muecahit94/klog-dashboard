@@ -435,8 +435,11 @@ export function filterRecords(records, filters) {
 
             if (filteredEntries.length === 0) return null;
 
-            // Return a shallow copy of the record with only matching entries
-            return { ...r, entries: filteredEntries };
+            // Recalculate total minutes for the filtered record
+            const newTotalMinutes = filteredEntries.reduce((sum, e) => sum + e.minutes, 0);
+
+            // Return a shallow copy of the record with matched entries and updated total
+            return { ...r, entries: filteredEntries, totalMinutes: newTotalMinutes };
         })
         .filter(Boolean);
 }

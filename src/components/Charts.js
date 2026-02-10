@@ -15,7 +15,7 @@ import {
     LineElement,
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import { aggregateByDate, aggregateByWeek, aggregateByMonth, aggregateByTag } from '@/lib/klogParser';
+import { aggregateByDate, aggregateByWeek, aggregateByMonth, aggregateByTag, formatMinutes } from '@/lib/klogParser';
 
 ChartJS.register(
     CategoryScale,
@@ -159,7 +159,7 @@ export default function Charts({ records }) {
                             tooltip: {
                                 ...chartDefaults.plugins.tooltip,
                                 callbacks: {
-                                    label: (ctx) => `${ctx.parsed.y.toFixed(1)}h`,
+                                    label: (ctx) => `${ctx.parsed.y.toFixed(2)}h`,
                                 },
                             },
                         },
@@ -191,7 +191,7 @@ export default function Charts({ records }) {
                             tooltip: {
                                 ...chartDefaults.plugins.tooltip,
                                 callbacks: {
-                                    label: (ctx) => ` ${ctx.parsed.toFixed(1)}h`,
+                                    label: (ctx) => ` ${ctx.parsed.toFixed(2)}h`,
                                 },
                             },
                         },
@@ -212,7 +212,7 @@ export default function Charts({ records }) {
                             tooltip: {
                                 ...chartDefaults.plugins.tooltip,
                                 callbacks: {
-                                    label: (ctx) => `${ctx.parsed.y.toFixed(1)}h`,
+                                    label: (ctx) => `${ctx.parsed.y.toFixed(2)}h`,
                                 },
                             },
                         },
@@ -241,7 +241,7 @@ export default function Charts({ records }) {
                                         }}
                                     />
                                 </div>
-                                <span className="tag-breakdown-value">{item.hours.toFixed(1)}h</span>
+                                <span className="tag-breakdown-value">{item.hours.toFixed(2)}h</span>
                             </div>
                         );
                     })}

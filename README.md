@@ -1,21 +1,25 @@
 # klog Dashboard 📊
 
+![klog Dashboard Preview](public/dashboard-preview.png)
+
 A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tracking files. Import your `.klg` files, explore your bookings with interactive charts, and filter by time, tags, or free-text search.
 
 ## ✨ Features
 
-- **📂 File Import** – Drag & drop files or entire folders, supports `.klg` and `.txt`
-- **📅 Date Range Filter** – Focus on specific time periods
-- **🏷️ Tag Filter** – Multi-select tags to drill into projects
-- **🔍 Free-Text Search** – Search across all summaries, dates, and file names
-- **📊 Interactive Charts** – Daily/weekly/monthly bar chart, tag distribution doughnut, trend line
-- **🗓️ Activity Heatmap** – GitHub-style contribution heatmap
-- **📋 Entries Table** – Sortable, paginated table of all entries with clickable tags
-- **📈 Tag Breakdown** – Visual bar chart of time per tag
-- **📥 Export** – Export filtered data as CSV or JSON
-- **⚡ Keyboard Shortcuts** – `⌘O` to import, `Esc` to clear filters
-- **💾 Persistent State** – Data saved in localStorage between sessions
-- **✨ Demo Data** – Built-in sample data to explore the dashboard immediately
+- **📂 File Import** – Drag & drop files, supports `.klg` and `.txt`.
+- **🔄 Auto-Import** – Automatically loads klog files from a `data/` directory on startup (Docker).
+- **📅 Date Range Filter** – Focus on specific time periods.
+- **🏷️ Tag Filter** – Multi-select tags to drill into projects.
+- **🔍 Free-Text Search** – Search across all summaries, dates, and file names.
+- **📊 Interactive Charts** – Daily/weekly/monthly bar chart, tag distribution doughnut, trend line.
+- **🗓️ Activity Heatmap** – GitHub-style contribution heatmap.
+- **📋 Entries Table** – Sortable, paginated table of all entries with clickable tags.
+- **📈 Tag Breakdown** – Visual bar chart of time per tag.
+- **⏱️ Smart Formatting** – Times displayed in readable `1h15m` format.
+- **📥 Export** – Export filtered data as CSV or JSON.
+- **⚡ Keyboard Shortcuts** – `⌘O` to import, `Esc` to clear filters.
+- **💾 Persistent State** – Data saved in localStorage between sessions.
+- **✨ Demo Data** – Built-in sample data to explore the dashboard immediately.
 
 ## 🚀 Quick Start
 
@@ -114,7 +118,9 @@ klog-dashboard/
 │       └── klogParser.js    # klog file parser
 ├── Dockerfile
 ├── docker-compose.yaml
-├── nginx.conf
+├── docker/
+│   ├── entrypoint.sh    # Auto-import script
+│   └── nginx.conf       # Nginx configuration
 └── .github/workflows/
     └── docker-build.yml
 ```

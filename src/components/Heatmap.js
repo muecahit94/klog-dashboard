@@ -117,7 +117,7 @@ export default function Heatmap({ records }) {
                                     >
                                         {hoveredCell === `${weekIdx}-${dayIdx}` && (
                                             <div className="heatmap-tooltip">
-                                                <strong>{day.date}</strong>: {day.hours.toFixed(1)}h
+                                                <strong>{day.date}</strong>: {day.hours.toFixed(2)}h
                                             </div>
                                         )}
                                     </div>
