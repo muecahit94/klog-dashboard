@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/muecahit94/klog-dashboard/compare/v1.0.1...v1.1.0) (2026-02-10)
+
+
+### Features
+
+* add percentage calculation to chart tooltip labels ([b0ec223](https://github.com/muecahit94/klog-dashboard/commit/b0ec22368606931279878dc52e182efd37b26182))
+
 ## [1.0.1](https://github.com/muecahit94/klog-dashboard/compare/v1.0.0...v1.0.1) (2026-02-10)
 
 
