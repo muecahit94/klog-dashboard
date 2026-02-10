@@ -6,8 +6,8 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 
 ## ✨ Features
 
-- **📂 File Import** – Drag & drop files, supports `.klg` and `.txt`.
-- **🔄 Auto-Import** – Automatically loads klog files from a `data/` directory on startup (Docker).
+- **📂 File Import** – Drag & drop files, supports `.klg`, `.klog`, and `.txt`.
+- **🔄 Realtime Folder Watch** – Point to a local folder via `KLOG_DATA_DIR` and see changes automatically.
 - **📅 Date Range Filter** – Focus on specific time periods.
 - **🏷️ Tag Filter** – Multi-select tags to drill into projects.
 - **🔍 Free-Text Search** – Search across all summaries, dates, and file names.
@@ -15,7 +15,6 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 - **🗓️ Activity Heatmap** – GitHub-style contribution heatmap.
 - **📋 Entries Table** – Sortable, paginated table of all entries with clickable tags.
 - **📈 Tag Breakdown** – Visual bar chart of time per tag.
-- **⏱️ Smart Formatting** – Times displayed in readable `1h15m` format.
 - **📥 Export** – Export filtered data as CSV or JSON.
 - **⚡ Keyboard Shortcuts** – `⌘O` to import, `Esc` to clear filters.
 - **💾 Persistent State** – Data saved in localStorage between sessions.
@@ -23,36 +22,56 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 
 ## 🚀 Quick Start
 
+### Local Development
+
+```bash
+npm install
+
+# Default — watches ./public/data for klog files
+npm run dev
+
+# Point to a custom folder
+KLOG_DATA_DIR=/path/to/your/klog/files npm run dev
+```
+
+Open **http://localhost:3000**
+
 ### Docker Compose (Recommended)
 
 ```bash
+# Place your .klg files in ./data/, then:
 docker compose up -d
 ```
 
 Dashboard available at **http://localhost:3000**
 
-### Docker
+The `docker-compose.yaml` mounts `./data` into the container and sets `KLOG_DATA_DIR=/data` automatically.
+
+### Docker (Manual)
 
 ```bash
 docker build -t klog-dashboard .
-docker run -p 3000:80 klog-dashboard
+docker run -p 3000:3000 -v /path/to/klog/files:/data -e KLOG_DATA_DIR=/data klog-dashboard
 ```
 
-### Local Development
+### Using the GHCR Image
 
 ```bash
-npm install
-npm run dev
+docker pull ghcr.io/muecahit94/klog-dashboard:latest
+docker run -p 3000:3000 -v /path/to/klog/files:/data -e KLOG_DATA_DIR=/data ghcr.io/muecahit94/klog-dashboard:latest
 ```
 
-Open **http://localhost:3000**
+## 🔄 Realtime Folder Watch
 
-### Production Build
+The dashboard watches a configurable directory for `.klg`, `.klog`, and `.txt` files. When a file is added or modified, the dashboard updates automatically within seconds.
 
-```bash
-npm run build
-# Static files generated in ./out/
-```
+| Method | Configuration |
+|--------|--------------|
+| **Local dev** | `KLOG_DATA_DIR=/path/to/folder npm run dev` |
+| **Docker** | Mount a volume to `/data` (see docker-compose.yaml) |
+| **Default** | `./public/data` (if `KLOG_DATA_DIR` is not set) |
+
+> **macOS Note**: If pointing to a Dropbox or iCloud folder, your terminal app may need **Full Disk Access** (System Settings → Privacy & Security → Full Disk Access).
 
 ## 📝 klog File Format
 
@@ -76,26 +95,20 @@ Project work
 - **Open ranges**: `9:00 - ?`
 - **Tags**: `#project`, `#tag=value`
 
-## 🐳 Docker Image
+## 🐳 Docker & CI/CD
 
-The Docker image is automatically built and pushed to GitHub Container Registry on every push to `main`.
-
-```bash
-# Pull the latest image
-docker pull ghcr.io/<your-username>/klog-dashboard:latest
-
-# Run it
-docker run -p 3000:80 ghcr.io/<your-username>/klog-dashboard:latest
-```
+- **Docker image** is built and pushed to GHCR on tagged releases.
+- **[Release Please](https://github.com/googleapis/release-please)** automates versioning and changelogs via Conventional Commits.
+- **[Renovate](https://docs.renovatebot.com/)** keeps dependencies up to date.
 
 ## 🏗️ Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Framework | Next.js (static export) |
+|-------|-----------:|
+| Framework | Next.js (standalone) |
 | Charts | Chart.js + react-chartjs-2 |
 | Styling | Vanilla CSS (dark theme) |
-| Container | Nginx (Alpine) |
+| Container | Node.js (Alpine) |
 | CI/CD | GitHub Actions |
 
 ## 📁 Project Structure
@@ -104,25 +117,25 @@ docker run -p 3000:80 ghcr.io/<your-username>/klog-dashboard:latest
 klog-dashboard/
 ├── src/
 │   ├── app/
-│   │   ├── globals.css      # Theme & styles
-│   │   ├── layout.js        # Root layout
-│   │   └── page.js          # Main dashboard
+│   │   ├── api/files/         # API routes for folder watch
+│   │   ├── globals.css        # Theme & styles
+│   │   ├── layout.js          # Root layout
+│   │   └── page.js            # Main dashboard
 │   ├── components/
-│   │   ├── Charts.js        # Bar, doughnut, line charts
-│   │   ├── EntriesTable.js  # Sortable entries table
-│   │   ├── FileImport.js    # File/folder import
-│   │   ├── FilterBar.js     # Date, tag, search filters
-│   │   ├── Heatmap.js       # Activity heatmap
-│   │   └── SummaryCards.js   # Summary statistics
+│   │   ├── Charts.js          # Bar, doughnut, line charts
+│   │   ├── EntriesTable.js    # Sortable entries table
+│   │   ├── FileImport.js      # File import & folder watch
+│   │   ├── FilterBar.js       # Date, tag, search filters
+│   │   ├── Heatmap.js         # Activity heatmap
+│   │   └── SummaryCards.js    # Summary statistics
 │   └── lib/
-│       └── klogParser.js    # klog file parser
+│       └── klogParser.js      # klog file parser
 ├── Dockerfile
 ├── docker-compose.yaml
-├── docker/
-│   ├── entrypoint.sh    # Auto-import script
-│   └── nginx.conf       # Nginx configuration
+├── renovate.json
 └── .github/workflows/
-    └── docker-build.yml
+    ├── docker-build.yml       # Build & push on tags
+    └── release-please.yml     # Automated releases
 ```
 
 ## 📄 License

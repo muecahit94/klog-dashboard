@@ -3,35 +3,29 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package.json package-lock.json* ./
-
-# Install dependencies
 RUN npm ci --prefer-offline --no-audit 2>/dev/null || npm install --prefer-offline --no-audit
 
-# Copy source code
 COPY . .
-
-# Build static export
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM node:20-alpine
 
-# Copy custom nginx config
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-# Copy entrypoint script
-COPY docker/entrypoint.sh /docker-entrypoint.d/99-klog-files.sh
-RUN chmod +x /docker-entrypoint.d/99-klog-files.sh
+# Copy standalone server
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
-# Copy static build output
-COPY --from=builder /app/out /usr/share/nginx/html
+# Default data directory (mount your klog files here)
+ENV KLOG_DATA_DIR=/data
+RUN mkdir -p /data
 
-# Expose port
-EXPOSE 80
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost/ || exit 1
+  CMD wget -qO- http://localhost:3000/ || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.js"]

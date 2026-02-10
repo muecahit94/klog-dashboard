@@ -11,17 +11,25 @@ export default function FileImport({ onImport, hasData }) {
     // State for tracking last modified times of auto-imported files
     const [knownFiles, setKnownFiles] = useState({});
 
-    // Poll for updates from /files.json
+    // Poll for updates from /api/files
     useEffect(() => {
         let isMounted = true;
 
         const checkUpdates = async () => {
             try {
-                const res = await fetch('/files.json', { cache: 'no-store' });
+                const res = await fetch('/api/files', { cache: 'no-store' });
                 if (!res.ok) return;
 
-                const fileList = await res.json();
-                if (!Array.isArray(fileList)) return;
+                const data = await res.json();
+
+                // Show API errors to user
+                if (data.error) {
+                    setImportStatus({ type: 'error', message: `Folder watch error: ${data.error}` });
+                    return;
+                }
+
+                const fileList = data.files || [];
+                if (!Array.isArray(fileList) || fileList.length === 0) return;
 
                 // Determine which files need updating
                 const filesToFetch = [];
@@ -29,10 +37,7 @@ export default function FileImport({ onImport, hasData }) {
                 let hasChanges = false;
 
                 for (const fileInfo of fileList) {
-                    // Handle both old format (string) and new format (object)
-                    const path = typeof fileInfo === 'string' ? fileInfo : fileInfo.path;
-                    const name = typeof fileInfo === 'string' ? path.split('/').pop() : fileInfo.name;
-                    const mtime = typeof fileInfo === 'string' ? 0 : (fileInfo.mtime || 0);
+                    const { path, name, mtime } = fileInfo;
 
                     // If file is new or modified since last check
                     if (!knownFiles[name] || knownFiles[name] < mtime) {
@@ -43,7 +48,6 @@ export default function FileImport({ onImport, hasData }) {
                 }
 
                 if (filesToFetch.length > 0) {
-                    console.log(`Detected changes in ${filesToFetch.length} files. Reloading...`);
                     const loadedFiles = [];
                     for (const f of filesToFetch) {
                         try {
@@ -58,16 +62,12 @@ export default function FileImport({ onImport, hasData }) {
 
                     if (loadedFiles.length > 0) {
                         const records = parseMultipleKlogFiles(loadedFiles);
-                        // replaceFiles option tells handleImport to remove old records for these files
                         onImport(records, { replaceFiles: loadedFiles.map(f => f.name) });
 
-                        // Update status only if it's the first load or significant update
-                        if (Object.keys(knownFiles).length === 0) {
-                            setImportStatus({
-                                type: 'success',
-                                message: `Auto-imported ${records.length} records from monitored folder`,
-                            });
-                        }
+                        setImportStatus({
+                            type: 'success',
+                            message: `Watching ${data.dataDir || 'folder'} — ${records.length} records from ${loadedFiles.length} file${loadedFiles.length > 1 ? 's' : ''}`,
+                        });
                     }
                 }
 
@@ -76,14 +76,13 @@ export default function FileImport({ onImport, hasData }) {
                 }
 
             } catch (err) {
-                // Silent fail for polling errors
                 console.debug('Polling error:', err);
             }
         };
 
-        // Check immediately and then every 2 seconds
+        // Check immediately and then every 3 seconds
         checkUpdates();
-        const interval = setInterval(checkUpdates, 2000);
+        const interval = setInterval(checkUpdates, 3000);
 
         return () => {
             isMounted = false;

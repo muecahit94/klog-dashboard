@@ -4,9 +4,11 @@ services:
     build: .
     container_name: klog-dashboard
     ports:
-      - "3000:80"
+      - "3000:3000"
     restart: unless-stopped
+    environment:
+      - KLOG_DATA_DIR=/data
     volumes:
-      - ./public/data:/usr/share/nginx/html/data
+      - /Users/muecahit/Dropbox/Allgemeines/Arbeitsunterlagen/Whizus/timetracking:/data
     labels:
       - "com.docker.compose.project=klog-dashboard"
