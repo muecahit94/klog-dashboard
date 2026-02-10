@@ -191,7 +191,11 @@ export default function Charts({ records }) {
                             tooltip: {
                                 ...chartDefaults.plugins.tooltip,
                                 callbacks: {
-                                    label: (ctx) => ` ${ctx.parsed.toFixed(2)}h`,
+                                    label: (ctx) => {
+                                        const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                        const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+                                        return ` ${ctx.parsed.toFixed(2)}h (${pct}%)`;
+                                    },
                                 },
                             },
                         },
