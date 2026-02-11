@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/muecahit94/klog-dashboard/compare/v1.1.0...v1.1.1) (2026-02-11)
+
+
+### Bug Fixes
+
+* **dockerfile:** remove healthcheck ([ebbb76f](https://github.com/muecahit94/klog-dashboard/commit/ebbb76f6f512e8e61b2d7ece7e74db205e4d772e))
+
 ## [1.1.0](https://github.com/muecahit94/klog-dashboard/compare/v1.0.1...v1.1.0) (2026-02-10)
 
 
