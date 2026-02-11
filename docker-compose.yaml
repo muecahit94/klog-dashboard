@@ -8,7 +8,6 @@ services:
     restart: unless-stopped
     environment:
       - KLOG_DATA_DIR=/data
+      - HOSTNAME=0.0.0.0
     volumes:
       - ./data:/data
-    labels:
-      - "com.docker.compose.project=klog-dashboard"
