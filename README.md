@@ -27,7 +27,7 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 ```bash
 npm install
 
-# Default — watches ./public/data for klog files
+# Default — watches ./data for klog files
 npm run dev
 
 # Point to a custom folder
@@ -69,7 +69,7 @@ The dashboard watches a configurable directory for `.klg`, `.klog`, and `.txt` f
 |--------|--------------|
 | **Local dev** | `KLOG_DATA_DIR=/path/to/folder npm run dev` |
 | **Docker** | Mount a volume to `/data` (see docker-compose.yaml) |
-| **Default** | `./public/data` (if `KLOG_DATA_DIR` is not set) |
+| **Default** | `./data` (if `KLOG_DATA_DIR` is not set) |
 
 > **macOS Note**: If pointing to a folder, your terminal app may need **Full Disk Access** (System Settings → Privacy & Security → Full Disk Access).
 
@@ -95,12 +95,6 @@ Project work
 - **Open ranges**: `9:00 - ?`
 - **Tags**: `#project`, `#tag=value`
 
-## 🐳 Docker & CI/CD
-
-- **Docker image** is built and pushed to GHCR on tagged releases.
-- **[Release Please](https://github.com/googleapis/release-please)** automates versioning and changelogs via Conventional Commits.
-- **[Renovate](https://docs.renovatebot.com/)** keeps dependencies up to date.
-
 ## 🏗️ Tech Stack
 
 | Layer | Technology |
@@ -110,33 +104,6 @@ Project work
 | Styling | Vanilla CSS (dark theme) |
 | Container | Node.js (Alpine) |
 | CI/CD | GitHub Actions |
-
-## 📁 Project Structure
-
-```
-klog-dashboard/
-├── src/
-│   ├── app/
-│   │   ├── api/files/         # API routes for folder watch
-│   │   ├── globals.css        # Theme & styles
-│   │   ├── layout.js          # Root layout
-│   │   └── page.js            # Main dashboard
-│   ├── components/
-│   │   ├── Charts.js          # Bar, doughnut, line charts
-│   │   ├── EntriesTable.js    # Sortable entries table
-│   │   ├── FileImport.js      # File import & folder watch
-│   │   ├── FilterBar.js       # Date, tag, search filters
-│   │   ├── Heatmap.js         # Activity heatmap
-│   │   └── SummaryCards.js    # Summary statistics
-│   └── lib/
-│       └── klogParser.js      # klog file parser
-├── Dockerfile
-├── docker-compose.yaml
-├── renovate.json
-└── .github/workflows/
-    ├── docker-build.yml       # Build & push on tags
-    └── release-please.yml     # Automated releases
-```
 
 ## 📄 License
 
