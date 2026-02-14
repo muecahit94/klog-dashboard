@@ -663,7 +663,8 @@ body::before {
 }
 
 .heatmap-cell:hover {
-  transform: scale(1.4);
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: -1px;
   z-index: 10;
 }
 
@@ -687,21 +688,7 @@ body::before {
   background: rgba(99, 102, 241, 0.85);
 }
 
-.heatmap-tooltip {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: 11px;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: var(--shadow-md);
-  z-index: 1000;
-}
+
 
 .heatmap-months {
   display: flex;

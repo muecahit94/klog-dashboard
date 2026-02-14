@@ -1,10 +1,24 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { minutesToDecimalHours } from '@/lib/klogParser';
 
 export default function Heatmap({ records }) {
-    const [hoveredCell, setHoveredCell] = useState(null);
+    const [tooltip, setTooltip] = useState(null);
+
+    const handleMouseMove = useCallback((e, day) => {
+        setTooltip({
+            x: e.clientX,
+            y: e.clientY,
+            date: day.date,
+            hours: day.hours,
+        });
+    }, []);
+
+    const handleMouseLeave = useCallback(() => {
+        setTooltip(null);
+    }, []);
 
     const heatmapData = useMemo(() => {
         if (records.length === 0) return { weeks: [], monthLabels: [] };
@@ -108,19 +122,13 @@ export default function Heatmap({ records }) {
                     <div className="heatmap-grid">
                         {heatmapData.weeks.map((week, weekIdx) => (
                             <div key={weekIdx} className="heatmap-column">
-                                {week.map((day, dayIdx) => (
+                                {week.map((day) => (
                                     <div
                                         key={day.date}
                                         className={`heatmap-cell level-${day.level}`}
-                                        onMouseEnter={() => setHoveredCell(`${weekIdx}-${dayIdx}`)}
-                                        onMouseLeave={() => setHoveredCell(null)}
-                                    >
-                                        {hoveredCell === `${weekIdx}-${dayIdx}` && (
-                                            <div className="heatmap-tooltip">
-                                                <strong>{day.date}</strong>: {day.hours.toFixed(2)}h
-                                            </div>
-                                        )}
-                                    </div>
+                                        onMouseMove={(e) => handleMouseMove(e, day)}
+                                        onMouseLeave={handleMouseLeave}
+                                    />
                                 ))}
                             </div>
                         ))}
@@ -136,6 +144,30 @@ export default function Heatmap({ records }) {
                     <span>More</span>
                 </div>
             </div>
+
+            {/* Tooltip via portal to escape backdrop-filter stacking context */}
+            {tooltip && typeof document !== 'undefined' && createPortal(
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: tooltip.x + 12,
+                        top: tooltip.y - 36,
+                        background: '#1a1d2e',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        padding: '6px 10px',
+                        fontSize: '16px',
+                        color: '#f0f1f5',
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'none',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                        zIndex: 9999,
+                    }}
+                >
+                    <strong>{tooltip.date}</strong>: {tooltip.hours.toFixed(2)}h
+                </div>,
+                document.body
+            )}
         </div>
     );
 }
