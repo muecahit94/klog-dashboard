@@ -10,6 +10,8 @@ import Heatmap from '@/components/Heatmap';
 import EntriesTable from '@/components/EntriesTable';
 import { filterRecords, getAllTags, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
 
+import pkg from '../../package.json';
+
 const STORAGE_KEY = 'klog-dashboard-records';
 
 export default function Home() {
@@ -249,12 +251,15 @@ export default function Home() {
                 borderTop: '1px solid var(--border-color)',
                 marginTop: '48px',
             }}>
-                klog Dashboard • Built for{' '}
+                klog Dashboard • v{pkg.version} • Built for{' '}
                 <a href="https://github.com/jotaen/klog" target="_blank" rel="noopener noreferrer"
                     style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>
                     klog
                 </a>
-                {' '}time tracking format
+                {' '}time tracking format • <a href="https://github.com/muecahit94/klog-dashboard" target="_blank" rel="noopener noreferrer"
+                    style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>
+                    GitHub
+                </a>
             </footer>
         </main>
     );
