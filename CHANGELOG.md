@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/muecahit94/klog-dashboard/compare/v1.1.1...v1.2.0) (2026-02-14)
+
+
+### Features
+
+* implemented environment-based configuration for daily target hours and data directory ([aa956e7](https://github.com/muecahit94/klog-dashboard/commit/aa956e7774bb10fb191710cabb3eccbd27b457b1))
+
 ## [1.1.1](https://github.com/muecahit94/klog-dashboard/compare/v1.1.0...v1.1.1) (2026-02-11)
 
 
