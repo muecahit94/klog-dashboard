@@ -21,6 +21,15 @@ export default function Home() {
         search: '',
     });
     const [showExportMenu, setShowExportMenu] = useState(false);
+    const [config, setConfig] = useState(null);
+
+    // Fetch config on mount
+    useEffect(() => {
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(data => setConfig(data))
+            .catch(err => console.error('Failed to load config:', err));
+    }, []);
 
     // Load from localStorage on mount + set default date filter to current month
     useEffect(() => {
@@ -204,10 +213,10 @@ export default function Home() {
                     />
 
                     {/* Summary Stats */}
-                    <SummaryCards records={filteredRecords} />
+                    <SummaryCards records={filteredRecords} config={config} />
 
                     {/* Charts */}
-                    <Charts records={filteredRecords} />
+                    <Charts records={filteredRecords} config={config} />
 
                     {/* Heatmap */}
                     <Heatmap records={filteredRecords} />

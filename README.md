@@ -73,6 +73,18 @@ The dashboard watches a configurable directory for `.klg`, `.klog`, and `.txt` f
 
 > **macOS Note**: If pointing to a folder, your terminal app may need **Full Disk Access** (System Settings → Privacy & Security → Full Disk Access).
 
+## ⚙️ Configuration
+
+The dashboard is configured via environment variables.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `KLOG_DATA_DIR` | Directory containing `.klg`, `.klog`, `.txt` files | `./data` |
+| `KLOG_DAILY_TARGET_HOURS` | Daily work hours target for "Should vs Actual" | `8.0` |
+
+A `.env.example` file is provided for reference. You can copy it to `.env` or set these variables in your shell/docker container.
+
+
 ## 📝 klog File Format
 
 The dashboard parses the [klog file format](https://github.com/jotaen/klog/blob/main/Specification.md). Here's a quick reference:

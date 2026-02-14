@@ -11,3 +11,6 @@ services:
       - HOSTNAME=0.0.0.0
     volumes:
       - ./data:/data
+    # Environment variables are read from .env file
+    # env_file:
+    #   - .env

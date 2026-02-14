@@ -71,7 +71,7 @@ const chartDefaults = {
     },
 };
 
-export default function Charts({ records }) {
+export default function Charts({ records, config }) {
     const [timeMode, setTimeMode] = useState('daily');
 
     const dailyData = useMemo(() => aggregateByDate(records), [records]);
@@ -84,6 +84,8 @@ export default function Charts({ records }) {
 
     const labelKey = timeMode === 'daily' ? 'date' :
         timeMode === 'weekly' ? 'week' : 'month';
+
+    const targetHours = config?.dailyTargetHours || 8.0;
 
     const barChartData = {
         labels: timeData.map(d => {
@@ -100,7 +102,9 @@ export default function Charts({ records }) {
             borderWidth: 1,
             borderRadius: 4,
             hoverBackgroundColor: 'rgba(99, 102, 241, 0.8)',
-        }],
+            order: 2,
+        },
+        ],
     };
 
     const trendChartData = {

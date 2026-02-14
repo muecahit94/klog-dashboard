@@ -2,7 +2,7 @@
 
 import { minutesToDecimalHours } from '@/lib/klogParser';
 
-export default function SummaryCards({ records }) {
+export default function SummaryCards({ records, config }) {
     // Calculate from entries (not r.totalMinutes) so filtered records show correct totals
     const totalMinutes = records.reduce((sum, r) =>
         sum + r.entries.reduce((eSum, e) => eSum + (e.minutes || 0), 0), 0);
@@ -16,9 +16,16 @@ export default function SummaryCards({ records }) {
         r.entries.forEach(e => e.tags.forEach(t => allTags.add(t.name)));
     });
 
-    const shouldTotalMin = records
-        .filter(r => r.shouldTotal !== null)
-        .reduce((sum, r) => sum + r.shouldTotal, 0);
+    const targetMin = (config?.dailyTargetHours || 8.0) * 60;
+
+    let shouldTotalMin = 0;
+    records.forEach(r => {
+        if (r.shouldTotal !== null) {
+            shouldTotalMin += r.shouldTotal;
+        } else {
+            shouldTotalMin += targetMin;
+        }
+    });
     const diff = totalMinutes - shouldTotalMin;
 
     const totalEntries = records.reduce((sum, r) => sum + r.entries.length, 0);

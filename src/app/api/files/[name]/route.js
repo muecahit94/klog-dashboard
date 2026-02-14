@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-const DEFAULT_DATA_DIR = path.join(process.cwd(), 'public', 'data');
+const DEFAULT_DATA_DIR = path.join(process.cwd(), 'data');
 
 export async function GET(request, { params }) {
     const dataDir = process.env.KLOG_DATA_DIR || DEFAULT_DATA_DIR;
