@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/muecahit94/klog-dashboard/compare/v1.2.0...v1.2.1) (2026-02-14)
+
+
+### Bug Fixes
+
+* heatmap update for cell hover effect to an outline ([62d7510](https://github.com/muecahit94/klog-dashboard/commit/62d751094bffdaa2b909469a8ebe87f483f48174))
+
 ## [1.2.0](https://github.com/muecahit94/klog-dashboard/compare/v1.1.1...v1.2.0) (2026-02-14)
 
 
