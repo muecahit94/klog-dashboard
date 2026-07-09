@@ -356,6 +356,46 @@ export function aggregateByMonth(records) {
         .map(([month, minutes]) => ({ month, minutes, hours: minutesToDecimalHours(minutes) }));
 }
 
+/**
+ * Aggregate the running (cumulative) time balance per day.
+ * Daily balance = actual worked minutes - "should" minutes for that day.
+ * The "should" value uses a record's own should-total when present,
+ * otherwise falls back to the configured daily target.
+ * @param {Array} records
+ * @param {number} targetMinutes - Fallback daily target in minutes
+ * @returns {Array<{date: string, actualMinutes: number, shouldMinutes: number, dailyMinutes: number, dailyHours: number, cumulativeMinutes: number, cumulativeHours: number}>}
+ */
+export function aggregateCumulativeBalance(records, targetMinutes = 480) {
+    const byDate = {};
+    for (const r of records) {
+        if (!byDate[r.date]) byDate[r.date] = { actual: 0, should: 0, hasShould: false };
+        byDate[r.date].actual += r.totalMinutes;
+        if (r.shouldTotal !== null && r.shouldTotal !== undefined) {
+            byDate[r.date].should += r.shouldTotal;
+            byDate[r.date].hasShould = true;
+        }
+    }
+
+    let cumulative = 0;
+    return Object.keys(byDate)
+        .sort((a, b) => a.localeCompare(b))
+        .map(date => {
+            const d = byDate[date];
+            const should = d.hasShould ? d.should : targetMinutes;
+            const daily = d.actual - should;
+            cumulative += daily;
+            return {
+                date,
+                actualMinutes: d.actual,
+                shouldMinutes: should,
+                dailyMinutes: daily,
+                dailyHours: minutesToDecimalHours(daily),
+                cumulativeMinutes: cumulative,
+                cumulativeHours: minutesToDecimalHours(cumulative),
+            };
+        });
+}
+
 export function aggregateByTag(records) {
     const map = {};
     for (const r of records) {
