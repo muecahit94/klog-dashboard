@@ -544,6 +544,49 @@ export function getAllTags(records) {
     return [...tagSet].sort();
 }
 
+/**
+ * Remove time tagged with any of the excluded tag names from all calculations.
+ * - Entries carrying an excluded tag are dropped.
+ * - A whole day is dropped when its record-level (date line) tags are excluded,
+ *   or when no entries remain after filtering — so excluded days (e.g. vacation)
+ *   do not count toward the balance's "should" total.
+ * Tag matching is by name, case-insensitive, and a leading '#' is ignored.
+ * @param {Array} records
+ * @param {Array<string>} excludedTags
+ * @returns {Array} filtered records with recomputed totals
+ */
+export function excludeTagsFromRecords(records, excludedTags = []) {
+    if (!excludedTags || excludedTags.length === 0) return records;
+
+    const excluded = new Set(
+        excludedTags.map(t => String(t).replace(/^#/, '').toLowerCase()).filter(Boolean)
+    );
+    if (excluded.size === 0) return records;
+
+    const hasExcluded = (tags) => (tags || []).some(t => {
+        const name = typeof t === 'string' ? t : t.name;
+        return excluded.has(String(name || '').toLowerCase());
+    });
+
+    const result = [];
+    for (const r of records) {
+        // Drop the entire day if the record-level tags are excluded
+        if (hasExcluded(r.tags)) continue;
+
+        const entries = r.entries.filter(e => !hasExcluded(e.allTags || e.tags));
+        if (entries.length === 0) continue;
+
+        const totalMinutes = entries.reduce((sum, e) => sum + e.minutes, 0);
+        result.push({
+            ...r,
+            entries,
+            totalMinutes,
+            totalFormatted: formatMinutes(totalMinutes),
+        });
+    }
+    return result;
+}
+
 export function filterRecords(records, filters) {
     const hasTagFilter = filters.tags && filters.tags.length > 0;
     const hasSearchFilter = filters.search && filters.search.trim();

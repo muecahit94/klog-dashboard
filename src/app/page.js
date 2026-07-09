@@ -8,12 +8,13 @@ import SummaryCards from '@/components/SummaryCards';
 import Charts from '@/components/Charts';
 import Heatmap from '@/components/Heatmap';
 import EntriesTable from '@/components/EntriesTable';
-import { filterRecords, getAllTags, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
+import { filterRecords, getAllTags, excludeTagsFromRecords, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
 
 import pkg from '../../package.json';
 
 const STORAGE_KEY = 'klog-dashboard-records';
 const THEME_KEY = 'klog-dashboard-theme';
+const EXCLUDE_KEY = 'klog-dashboard-excluded-tags';
 
 export default function Home() {
     const [records, setRecords] = useState([]);
@@ -26,6 +27,10 @@ export default function Home() {
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [config, setConfig] = useState(null);
     const [theme, setTheme] = useState('dark');
+    const [excludedTags, setExcludedTags] = useState([]);
+    const [excludeLoaded, setExcludeLoaded] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [excludeInput, setExcludeInput] = useState('');
 
     // Load persisted theme and apply it to the document root
     useEffect(() => {
@@ -51,6 +56,55 @@ export default function Home() {
             }
             return next;
         });
+    }, []);
+
+    // Load persisted excluded tags on mount
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(EXCLUDE_KEY);
+            if (raw !== null) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) setExcludedTags(parsed);
+            }
+        } catch (e) {
+            // ignore
+        }
+        setExcludeLoaded(true);
+    }, []);
+
+    // Seed from env-provided config default only if the user never set their own list
+    useEffect(() => {
+        if (!excludeLoaded || !config) return;
+        let stored = null;
+        try {
+            stored = localStorage.getItem(EXCLUDE_KEY);
+        } catch (e) {
+            // ignore
+        }
+        if (stored === null && Array.isArray(config.excludedTags) && config.excludedTags.length > 0) {
+            setExcludedTags(config.excludedTags);
+        }
+    }, [config, excludeLoaded]);
+
+    // Persist excluded tags across sessions
+    useEffect(() => {
+        if (!excludeLoaded) return;
+        try {
+            localStorage.setItem(EXCLUDE_KEY, JSON.stringify(excludedTags));
+        } catch (e) {
+            // ignore
+        }
+    }, [excludedTags, excludeLoaded]);
+
+    const addExcludedTag = useCallback((raw) => {
+        const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
+        if (!name) return;
+        setExcludedTags(prev => (prev.includes(name) ? prev : [...prev, name]));
+        setExcludeInput('');
+    }, []);
+
+    const removeExcludedTag = useCallback((name) => {
+        setExcludedTags(prev => prev.filter(t => t !== name));
     }, []);
 
     // Fetch config on mount
@@ -132,8 +186,13 @@ export default function Home() {
         localStorage.removeItem(STORAGE_KEY);
     }, []);
 
-    const allTags = useMemo(() => getAllTags(records), [records]);
-    const filteredRecords = useMemo(() => filterRecords(records, filters), [records, filters]);
+    // Excluded tags are removed from every calculation and view; persists across sessions
+    const activeRecords = useMemo(
+        () => excludeTagsFromRecords(records, excludedTags),
+        [records, excludedTags],
+    );
+    const allTags = useMemo(() => getAllTags(activeRecords), [activeRecords]);
+    const filteredRecords = useMemo(() => filterRecords(activeRecords, filters), [activeRecords, filters]);
 
     const handleTagClick = useCallback((tag) => {
         const tagName = typeof tag === 'object' ? tag.full : tag;
@@ -201,11 +260,11 @@ export default function Home() {
                 <div className="header-actions">
                     <button
                         className="btn btn-secondary btn-sm"
-                        onClick={toggleTheme}
-                        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                        aria-label="Toggle color theme"
+                        onClick={() => setShowSettings(true)}
+                        title="Settings"
+                        aria-label="Open settings"
                     >
-                        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+                        ⚙️ Settings{excludedTags.length ? ` (${excludedTags.length})` : ''}
                     </button>
                     {hasData && (
                         <>
@@ -297,6 +356,107 @@ export default function Home() {
                     GitHub
                 </a>
             </footer>
+
+            {/* Settings Modal */}
+            {showSettings && (
+                <div
+                    onClick={() => setShowSettings(false)}
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 1000,
+                        background: 'rgba(0, 0, 0, 0.55)',
+                        backdropFilter: 'blur(2px)',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'center',
+                        padding: '80px 16px 16px',
+                    }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            width: '100%',
+                            maxWidth: '460px',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 'var(--radius-lg)',
+                            boxShadow: 'var(--shadow-lg)',
+                            padding: '20px',
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+                            <h2 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>⚙️ Settings</h2>
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setShowSettings(false)}
+                                aria-label="Close settings"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Appearance */}
+                        <section style={{ marginBottom: '22px' }}>
+                            <h3 style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Appearance
+                            </h3>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: '14px', color: 'var(--text-primary)' }}>Theme</span>
+                                <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
+                                    {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+                                </button>
+                            </div>
+                        </section>
+
+                        {/* Excluded tags */}
+                        <section>
+                            <h3 style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Excluded Tags
+                            </h3>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                                Removed from all charts, tables, and balance calculations
+                                (e.g. vacation, sickleave, holiday). Saved automatically.
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                                <input
+                                    className="filter-input"
+                                    placeholder="e.g. vacation, sickleave, holiday"
+                                    value={excludeInput}
+                                    onChange={(e) => setExcludeInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            addExcludedTag(excludeInput);
+                                        }
+                                    }}
+                                    style={{ flex: 1, minWidth: 0 }}
+                                />
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => addExcludedTag(excludeInput)}
+                                >
+                                    Add
+                                </button>
+                            </div>
+                            <div className="filter-chips" style={{ marginBottom: 0 }}>
+                                {excludedTags.length === 0 ? (
+                                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        No excluded tags
+                                    </span>
+                                ) : (
+                                    excludedTags.map(tag => (
+                                        <span key={tag} className="filter-chip">
+                                            #{tag}
+                                            <button onClick={() => removeExcludedTag(tag)}>×</button>
+                                        </span>
+                                    ))
+                                )}
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
