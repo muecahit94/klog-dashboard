@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/muecahit94/klog-dashboard/compare/v1.3.0...v1.4.0) (2026-07-09)
+
+
+### Features
+
+* add light theme support and cumulative balance chart ([9865bf5](https://github.com/muecahit94/klog-dashboard/commit/9865bf5b94c9aeb40c45651a1f55e01349449972))
+* add light theme support and cumulative balance chart ([5527b4b](https://github.com/muecahit94/klog-dashboard/commit/5527b4b41ddbfbd59608a49bd451e1241f5bff2e))
+
 ## [1.3.0](https://github.com/muecahit94/klog-dashboard/compare/v1.2.1...v1.3.0) (2026-02-19)
 
 
