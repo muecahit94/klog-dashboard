@@ -80,6 +80,7 @@ The dashboard is configured via environment variables.
 |----------|-------------|---------|
 | `KLOG_DATA_DIR` | Directory containing `.klg`, `.klog`, `.txt` files | `./data` |
 | `KLOG_DAILY_TARGET_HOURS` | Daily work hours target for "Should vs Actual" | `8.0` |
+| `KLOG_EXCLUDED_TAGS` | Comma-separated tags excluded from all calculations (e.g. `vacation,sickleave,holiday`) | _(empty)_ |
 
 A `.env.example` file is provided for reference. You can copy it to `.env` or set these variables in your shell/docker container.
 
