@@ -359,22 +359,17 @@ export function aggregateByMonth(records) {
 export function aggregateByTag(records) {
     const map = {};
     for (const r of records) {
-        const allTags = new Set();
-        r.tags.forEach(t => allTags.add(t.full));
-        r.entries.forEach(e => e.tags.forEach(t => allTags.add(t.full)));
+        if (r.entries.length === 0) {
+            const tag = getPrimaryTag([], r.tags);
+            if (!map[tag]) map[tag] = 0;
+            map[tag] += r.totalMinutes;
+            continue;
+        }
 
-        if (allTags.size === 0) {
-            if (!map['(untagged)']) map['(untagged)'] = 0;
-            map['(untagged)'] += r.totalMinutes;
-        } else {
-            for (const tag of allTags) {
-                if (!map[tag]) map[tag] = 0;
-                // Attribute all time from entries with this tag
-                const tagMinutes = r.entries
-                    .filter(e => e.allTags.some(et => et.full === tag))
-                    .reduce((sum, e) => sum + e.minutes, 0);
-                map[tag] += tagMinutes || r.totalMinutes;
-            }
+        for (const entry of r.entries) {
+            const tag = getPrimaryTag(entry.tags, r.tags);
+            if (!map[tag]) map[tag] = 0;
+            map[tag] += entry.minutes;
         }
     }
     return Object.entries(map)
@@ -383,31 +378,104 @@ export function aggregateByTag(records) {
 }
 
 /**
+ * Aggregate time by primary tag (first hashtag) with the remaining hashtags
+ * grouped as children underneath it. Child minutes always sum to the parent's
+ * minutes, so the breakdown shows how each primary tag splits across its
+ * secondary tags. Entries with only a primary tag are grouped under '(direct)'.
+ * @param {Array} records
+ * @returns {Array<{tag: string, minutes: number, hours: number, children: Array<{tag: string, minutes: number, hours: number}>}>}
+ */
+export function aggregateByTagGrouped(records) {
+    // primaryTag -> { minutes, children: { childTag -> minutes } }
+    const map = {};
+
+    const add = (tags, minutes) => {
+        const names = tags.map(t => (typeof t === 'string' ? t : t.full));
+        const primary = names[0] || '(untagged)';
+        if (!map[primary]) map[primary] = { minutes: 0, children: {} };
+        map[primary].minutes += minutes;
+
+        const secondary = names.slice(1);
+        if (secondary.length === 0) {
+            map[primary].children['(direct)'] = (map[primary].children['(direct)'] || 0) + minutes;
+        } else {
+            const per = minutes / secondary.length;
+            for (const child of secondary) {
+                map[primary].children[child] = (map[primary].children[child] || 0) + per;
+            }
+        }
+    };
+
+    for (const r of records) {
+        if (r.entries.length === 0) {
+            add(r.tags, r.totalMinutes);
+            continue;
+        }
+        for (const entry of r.entries) {
+            const tags = entry.tags.length > 0 ? entry.tags : r.tags;
+            add(tags, entry.minutes);
+        }
+    }
+
+    return Object.entries(map)
+        .map(([tag, data]) => ({
+            tag,
+            minutes: data.minutes,
+            hours: minutesToDecimalHours(data.minutes),
+            children: Object.entries(data.children)
+                .sort(([, a], [, b]) => b - a)
+                .map(([childTag, minutes]) => ({
+                    tag: childTag,
+                    minutes,
+                    hours: minutesToDecimalHours(minutes),
+                })),
+        }))
+        .sort((a, b) => b.minutes - a.minutes);
+}
+
+/**
  * Helper: aggregate records by a period key with per-tag breakdowns.
  * @param {Array} records
  * @param {Function} keyFn - (record) => periodKey string
- * @returns {Array<{key: string, tagBreakdown: Object<string, number>}>}
+ * @returns {Array<{key: string, tagBreakdown: Object<string, number>, subBreakdown: Object<string, Object<string, number>>}>}
  */
 function aggregateByPeriodWithTags(records, keyFn) {
     // Map: periodKey -> { tagName -> totalMinutes }
     const map = {};
+    // Map: periodKey -> primaryTag -> { subTag -> totalMinutes }
+    const subMap = {};
     for (const r of records) {
         const key = keyFn(r);
         if (!map[key]) map[key] = {};
+        if (!subMap[key]) subMap[key] = {};
         for (const entry of r.entries) {
-            const tags = entry.allTags && entry.allTags.length > 0
-                ? entry.allTags.map(t => t.full || t)
-                : ['(untagged)'];
-            const perTag = entry.minutes / tags.length;
-            for (const tag of tags) {
-                if (!map[key][tag]) map[key][tag] = 0;
-                map[key][tag] += perTag;
+            const tags = entry.tags.length > 0 ? entry.tags : r.tags;
+            const tag = getPrimaryTag(entry.tags, r.tags);
+            if (!map[key][tag]) map[key][tag] = 0;
+            map[key][tag] += entry.minutes;
+
+            // Track second/third/... hashtags grouped under the primary tag
+            if (!subMap[key][tag]) subMap[key][tag] = {};
+            const secondary = tags.slice(1).map(t => (typeof t === 'string' ? t : t.full));
+            if (secondary.length > 0) {
+                const per = entry.minutes / secondary.length;
+                for (const child of secondary) {
+                    subMap[key][tag][child] = (subMap[key][tag][child] || 0) + per;
+                }
             }
         }
     }
     return Object.entries(map)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, tagBreakdown]) => ({ key, tagBreakdown }));
+        .map(([key, tagBreakdown]) => ({ key, tagBreakdown, subBreakdown: subMap[key] || {} }));
+}
+
+function getPrimaryTag(entryTags = [], recordTags = []) {
+    const tags = entryTags.length > 0 ? entryTags : recordTags;
+    const firstTag = tags[0];
+
+    if (!firstTag) return '(untagged)';
+    return typeof firstTag === 'string' ? firstTag : firstTag.full;
 }
 
 export function aggregateByDateWithTags(records) {

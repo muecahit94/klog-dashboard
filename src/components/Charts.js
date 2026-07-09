@@ -18,7 +18,7 @@ import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
     aggregateByDate, aggregateByWeek, aggregateByMonth,
     aggregateByDateWithTags, aggregateByWeekWithTags, aggregateByMonthWithTags,
-    aggregateByTag, formatMinutes, minutesToDecimalHours,
+    aggregateByTagGrouped, formatMinutes, minutesToDecimalHours,
 } from '@/lib/klogParser';
 
 ChartJS.register(
@@ -82,7 +82,7 @@ export default function Charts({ records, config }) {
     const dailyData = useMemo(() => aggregateByDate(records), [records]);
     const weeklyData = useMemo(() => aggregateByWeek(records), [records]);
     const monthlyData = useMemo(() => aggregateByMonth(records), [records]);
-    const tagData = useMemo(() => aggregateByTag(records), [records]);
+    const groupedTagData = useMemo(() => aggregateByTagGrouped(records), [records]);
 
     const dailyTagData = useMemo(() => aggregateByDateWithTags(records), [records]);
     const weeklyTagData = useMemo(() => aggregateByWeekWithTags(records), [records]);
@@ -132,6 +132,7 @@ export default function Charts({ records, config }) {
             borderColor: TAG_COLORS[i % TAG_COLORS.length],
             borderWidth: 1,
             borderRadius: 2,
+            _tag: tag,
         }));
 
         return { labels, datasets };
@@ -182,6 +183,22 @@ export default function Charts({ records, config }) {
                         if (showTags && val === 0) return null;
                         return showTags ? ` ${ctx.dataset.label}: ${val.toFixed(2)}h` : `${val.toFixed(2)}h`;
                     },
+                    afterLabel: (ctx) => {
+                        if (!showTags) return undefined;
+                        if (ctx.parsed.y === 0) return undefined;
+                        const primary = ctx.dataset._tag;
+                        const period = timeTagData[ctx.dataIndex];
+                        const subs = period?.subBreakdown?.[primary];
+                        if (!subs) return undefined;
+                        const entries = Object.entries(subs).sort(([, a], [, b]) => b - a);
+                        if (entries.length === 0) return undefined;
+                        const parentMins = period.tagBreakdown[primary] || 0;
+                        return entries.map(([child, mins]) => {
+                            const hrs = minutesToDecimalHours(mins);
+                            const pct = parentMins > 0 ? ((mins / parentMins) * 100).toFixed(0) : 0;
+                            return `    › #${child}: ${hrs.toFixed(2)}h (${pct}%)`;
+                        });
+                    },
                 },
             },
         },
@@ -217,16 +234,20 @@ export default function Charts({ records, config }) {
         }],
     };
 
-    const doughnutData = {
-        labels: tagData.slice(0, 10).map(d => '#' + d.tag),
-        datasets: [{
-            data: tagData.slice(0, 10).map(d => d.hours),
-            backgroundColor: TAG_COLORS.slice(0, 10).map(c => c + 'cc'),
-            borderColor: TAG_COLORS.slice(0, 10),
-            borderWidth: 2,
-            hoverOffset: 6,
-        }],
-    };
+    const doughnutData = useMemo(() => {
+        const groups = groupedTagData.slice(0, 10);
+        return {
+            labels: groups.map(g => '#' + g.tag),
+            datasets: [{
+                data: groups.map(g => g.hours),
+                backgroundColor: groups.map((g, i) => TAG_COLORS[i % TAG_COLORS.length] + 'cc'),
+                borderColor: groups.map((g, i) => TAG_COLORS[i % TAG_COLORS.length]),
+                borderWidth: 2,
+                hoverOffset: 6,
+                _groups: groups,
+            }],
+        };
+    }, [groupedTagData]);
 
     return (
         <div className="charts-grid animate-slide-up">
@@ -295,6 +316,9 @@ export default function Charts({ records, config }) {
             <div className="chart-card">
                 <div className="chart-header">
                     <h3 className="chart-title">Tag Distribution</h3>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        hover for sub-tags
+                    </span>
                 </div>
                 <div className="chart-container">
                     <Doughnut data={doughnutData} options={{
@@ -319,6 +343,17 @@ export default function Charts({ records, config }) {
                                         const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
                                         const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
                                         return ` ${ctx.parsed.toFixed(2)}h (${pct}%)`;
+                                    },
+                                    afterLabel: (ctx) => {
+                                        const group = ctx.dataset._groups?.[ctx.dataIndex];
+                                        if (!group) return undefined;
+                                        const subs = group.children.filter(c => c.tag !== '(direct)');
+                                        if (subs.length === 0) return undefined;
+                                        const parentHours = group.hours || 1;
+                                        return subs.map(c => {
+                                            const p = ((c.hours / parentHours) * 100).toFixed(0);
+                                            return `  › #${c.tag}: ${c.hours.toFixed(2)}h (${p}%)`;
+                                        });
                                     },
                                 },
                             },
@@ -354,25 +389,66 @@ export default function Charts({ records, config }) {
                     <h3 className="chart-title">Tag Breakdown</h3>
                 </div>
                 <div className="tag-breakdown">
-                    {tagData.slice(0, 15).map((item, i) => {
-                        const maxHours = tagData[0]?.hours || 1;
-                        const pct = (item.hours / maxHours) * 100;
+                    {(() => {
+                        const totalHours = groupedTagData.reduce((sum, g) => sum + g.hours, 0);
+                        const maxHours = groupedTagData[0]?.hours || 1;
+                        return groupedTagData.slice(0, 15).map((group, i) => {
+                        const pct = (group.hours / maxHours) * 100;
+                        const sharePct = totalHours > 0 ? (group.hours / totalHours) * 100 : 0;
+                        const color = TAG_COLORS[i % TAG_COLORS.length];
+                        const hasChildren = group.children.some(c => c.tag !== '(direct)');
                         return (
-                            <div key={item.tag} className="tag-breakdown-item">
-                                <span className="tag-breakdown-name">#{item.tag}</span>
-                                <div className="tag-breakdown-bar">
-                                    <div
-                                        className="tag-breakdown-fill"
-                                        style={{
-                                            width: `${pct}%`,
-                                            background: TAG_COLORS[i % TAG_COLORS.length],
-                                        }}
-                                    />
+                            <div key={group.tag} className="tag-breakdown-group">
+                                <div className="tag-breakdown-item">
+                                    <span className="tag-breakdown-name">#{group.tag}</span>
+                                    <div className="tag-breakdown-bar">
+                                        <div
+                                            className="tag-breakdown-fill"
+                                            style={{ width: `${pct}%`, background: color }}
+                                        />
+                                    </div>
+                                    <span className="tag-breakdown-value">
+                                        {group.hours.toFixed(2)}h ({sharePct.toFixed(0)}%)
+                                    </span>
                                 </div>
-                                <span className="tag-breakdown-value">{item.hours.toFixed(2)}h</span>
+                                {hasChildren && group.children.map((child) => {
+                                    const childPct = group.hours > 0 ? (child.hours / group.hours) * 100 : 0;
+                                    const label = child.tag === '(direct)' ? 'direct (no sub-tag)' : '#' + child.tag;
+                                    return (
+                                        <div
+                                            key={group.tag + '::' + child.tag}
+                                            className="tag-breakdown-item"
+                                            style={{ paddingLeft: '20px', opacity: 0.85 }}
+                                        >
+                                            <span
+                                                className="tag-breakdown-name"
+                                                style={{ fontSize: '12px', color: 'var(--text-muted)' }}
+                                            >
+                                                <span style={{ marginRight: '4px' }}>↳</span>{label}
+                                            </span>
+                                            <div className="tag-breakdown-bar">
+                                                <div
+                                                    className="tag-breakdown-fill"
+                                                    style={{
+                                                        width: `${childPct}%`,
+                                                        background: color,
+                                                        opacity: 0.55,
+                                                    }}
+                                                />
+                                            </div>
+                                            <span
+                                                className="tag-breakdown-value"
+                                                style={{ fontSize: '12px' }}
+                                            >
+                                                {child.hours.toFixed(2)}h ({childPct.toFixed(0)}%)
+                                            </span>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         );
-                    })}
+                    });
+                    })()}
                 </div>
             </div>
         </div>
