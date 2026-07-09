@@ -13,6 +13,7 @@ import { filterRecords, getAllTags, minutesToDecimalHours, formatMinutes } from 
 import pkg from '../../package.json';
 
 const STORAGE_KEY = 'klog-dashboard-records';
+const THEME_KEY = 'klog-dashboard-theme';
 
 export default function Home() {
     const [records, setRecords] = useState([]);
@@ -24,6 +25,33 @@ export default function Home() {
     });
     const [showExportMenu, setShowExportMenu] = useState(false);
     const [config, setConfig] = useState(null);
+    const [theme, setTheme] = useState('dark');
+
+    // Load persisted theme and apply it to the document root
+    useEffect(() => {
+        let saved = null;
+        try {
+            saved = localStorage.getItem(THEME_KEY);
+        } catch (e) {
+            // ignore
+        }
+        const initial = saved === 'light' || saved === 'dark' ? saved : 'dark';
+        setTheme(initial);
+        document.documentElement.setAttribute('data-theme', initial);
+    }, []);
+
+    const toggleTheme = useCallback(() => {
+        setTheme((prev) => {
+            const next = prev === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            try {
+                localStorage.setItem(THEME_KEY, next);
+            } catch (e) {
+                // ignore
+            }
+            return next;
+        });
+    }, []);
 
     // Fetch config on mount
     useEffect(() => {
@@ -171,6 +199,14 @@ export default function Home() {
                     </div>
                 </div>
                 <div className="header-actions">
+                    <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={toggleTheme}
+                        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                        aria-label="Toggle color theme"
+                    >
+                        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+                    </button>
                     {hasData && (
                         <>
                             <div className="export-dropdown">

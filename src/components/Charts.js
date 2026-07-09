@@ -18,7 +18,7 @@ import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
     aggregateByDate, aggregateByWeek, aggregateByMonth,
     aggregateByDateWithTags, aggregateByWeekWithTags, aggregateByMonthWithTags,
-    aggregateByTagGrouped, formatMinutes, minutesToDecimalHours,
+    aggregateByTagGrouped, aggregateCumulativeBalance, formatMinutes, minutesToDecimalHours,
 } from '@/lib/klogParser';
 
 ChartJS.register(
@@ -234,6 +234,33 @@ export default function Charts({ records, config }) {
         }],
     };
 
+    const balanceData = useMemo(
+        () => aggregateCumulativeBalance(records, targetHours * 60),
+        [records, targetHours],
+    );
+
+    const balanceChartData = {
+        labels: balanceData.map(d => d.date.slice(5)),
+        datasets: [{
+            label: 'Cumulative Balance',
+            data: balanceData.map(d => d.cumulativeHours),
+            borderColor: '#8b5cf6',
+            backgroundColor: 'rgba(139, 92, 246, 0.12)',
+            fill: {
+                target: 'origin',
+                above: 'rgba(16, 185, 129, 0.12)',
+                below: 'rgba(239, 68, 68, 0.12)',
+            },
+            tension: 0.3,
+            pointRadius: 3,
+            pointBackgroundColor: balanceData.map(d => d.cumulativeMinutes >= 0 ? '#10b981' : '#ef4444'),
+            pointBorderColor: 'transparent',
+            pointHoverRadius: 6,
+            pointHoverBorderColor: '#fff',
+            pointHoverBorderWidth: 2,
+        }],
+    };
+
     const doughnutData = useMemo(() => {
         const groups = groupedTagData.slice(0, 10);
         return {
@@ -376,6 +403,39 @@ export default function Charts({ records, config }) {
                                 ...chartDefaults.plugins.tooltip,
                                 callbacks: {
                                     label: (ctx) => `${ctx.parsed.y.toFixed(2)}h`,
+                                },
+                            },
+                        },
+                    }} />
+                </div>
+            </div>
+
+            {/* Cumulative Balance */}
+            <div className="chart-card full-width">
+                <div className="chart-header">
+                    <h3 className="chart-title">Cumulative Balance</h3>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        running overtime / undertime vs target
+                    </span>
+                </div>
+                <div className="chart-container" style={{ height: '220px' }}>
+                    <Line data={balanceChartData} options={{
+                        ...chartDefaults,
+                        plugins: {
+                            ...chartDefaults.plugins,
+                            tooltip: {
+                                ...chartDefaults.plugins.tooltip,
+                                callbacks: {
+                                    label: (ctx) => {
+                                        const d = balanceData[ctx.dataIndex];
+                                        const sign = d.cumulativeMinutes >= 0 ? '+' : '';
+                                        return ` Balance: ${sign}${formatMinutes(d.cumulativeMinutes)}`;
+                                    },
+                                    afterLabel: (ctx) => {
+                                        const d = balanceData[ctx.dataIndex];
+                                        const sign = d.dailyMinutes >= 0 ? '+' : '';
+                                        return `  Day: ${sign}${formatMinutes(d.dailyMinutes)}`;
+                                    },
                                 },
                             },
                         },
