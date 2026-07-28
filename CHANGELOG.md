@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0](https://github.com/muecahit94/klog-dashboard/compare/v1.5.0...v1.6.0) (2026-07-28)
+
+
+### Features
+
+* update dependencies and ESLint configuration ([2c87fc6](https://github.com/muecahit94/klog-dashboard/commit/2c87fc6b9687168fe025dda1172e430e84ab1eab))
+* update global styles and integrate Inter font for improved typography ([ca8f505](https://github.com/muecahit94/klog-dashboard/commit/ca8f505d4a1fb6eb3247f747f3121cbfcd7d0b69))
+
 ## [1.5.0](https://github.com/muecahit94/klog-dashboard/compare/v1.4.0...v1.5.0) (2026-07-09)
 
 
