@@ -9,6 +9,7 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 - **📂 File Import** – Drag & drop files, supports `.klg`, `.klog`, and `.txt`.
 - **🔄 Realtime Folder Watch** – Point to a local folder via `KLOG_DATA_DIR` and see changes automatically.
 - **📅 Date Range Filter** – Focus on specific time periods.
+- **⚡ Quick Date Presets** – One-click Today, This Week, This Month, Last Month, Last 7/30 Days, This Year, and All Time.
 - **🏷️ Tag Filter** – Multi-select tags to drill into projects.
 - **🔍 Free-Text Search** – Search across all summaries, dates, and file names.
 - **📊 Interactive Charts** – Daily/weekly/monthly bar chart, tag distribution doughnut, trend line.
@@ -117,6 +118,13 @@ Project work
 | Container | Node.js (Alpine) |
 | CI/CD | GitHub Actions |
 
-## 📄 License
+## � Security
+
+- **Hardened HTTP headers** – A strict `Content-Security-Policy` (no external origins), plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and a locked-down `Permissions-Policy`. The `X-Powered-By` header is disabled.
+- **Path-traversal protection** – The file API only serves plain `.klg`/`.klog`/`.txt` filenames from `KLOG_DATA_DIR`; separators, traversal sequences, and other extensions are rejected.
+- **Non-root container** – The Docker image runs as the unprivileged `node` user and ships only production dependencies, with a built-in `HEALTHCHECK`.
+- **No runtime vulnerabilities** – `npm audit --omit=dev` reports zero known advisories.
+
+## �📄 License
 
 [MIT](LICENSE)
