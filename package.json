@@ -7,21 +7,22 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "lint": "next lint"
+        "lint": "eslint ."
     },
     "dependencies": {
         "chart.js": "^4.4.7",
-        "next": "^15.1.0",
-        "react": "^19.0.0",
+        "next": "^16.2.12",
+        "react": "^19.2.0",
         "react-chartjs-2": "^5.2.0",
-        "react-datepicker": "^7.5.0",
-        "react-dom": "^19.0.0"
+        "react-datepicker": "^9.1.0",
+        "react-dom": "^19.2.0"
     },
     "overrides": {
-        "postcss": "8.5.16"
+        "postcss": "^8.5.18",
+        "sharp": "^0.35.3"
     },
     "devDependencies": {
         "eslint": "^9.0.0",
-        "eslint-config-next": "^15.1.0"
+        "eslint-config-next": "^16.2.12"
     }
 }

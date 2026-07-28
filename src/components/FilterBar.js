@@ -76,8 +76,65 @@ export default function FilterBar({ filters, onFilterChange, allTags }) {
         onFilterChange({ ...filters, dateTo: val });
     };
 
+    // Quick date-range presets (all computed in local time)
+    const datePresets = useMemo(() => {
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = today.getMonth();
+        const d = today.getDate();
+        const at = (yy, mm, dd) => new Date(yy, mm, dd);
+
+        // Monday-based start of the current week
+        const dow = (today.getDay() + 6) % 7; // 0 = Monday
+        const weekStart = at(y, m, d - dow);
+        const weekEnd = at(y, m, d - dow + 6);
+
+        return [
+            { label: 'Today', from: at(y, m, d), to: at(y, m, d) },
+            { label: 'This Week', from: weekStart, to: weekEnd },
+            { label: 'Last 7 Days', from: at(y, m, d - 6), to: at(y, m, d) },
+            { label: 'This Month', from: at(y, m, 1), to: at(y, m + 1, 0) },
+            { label: 'Last Month', from: at(y, m - 1, 1), to: at(y, m, 0) },
+            { label: 'Last 30 Days', from: at(y, m, d - 29), to: at(y, m, d) },
+            { label: 'This Year', from: at(y, 0, 1), to: at(y, 11, 31) },
+            { label: 'All Time', from: null, to: null },
+        ];
+    }, []);
+
+    const applyPreset = (preset) => {
+        onFilterChange({
+            ...filters,
+            dateFrom: preset.from ? formatLocalDate(preset.from) : '',
+            dateTo: preset.to ? formatLocalDate(preset.to) : '',
+        });
+    };
+
+    const activePreset = useMemo(() => {
+        const from = filters.dateFrom || '';
+        const to = filters.dateTo || '';
+        const match = datePresets.find(p => {
+            const pf = p.from ? formatLocalDate(p.from) : '';
+            const pt = p.to ? formatLocalDate(p.to) : '';
+            return pf === from && pt === to;
+        });
+        return match ? match.label : null;
+    }, [filters.dateFrom, filters.dateTo, datePresets]);
+
     return (
         <div className="animate-fade-in" style={{ position: 'relative', zIndex: 50 }}>
+            <div className="date-presets" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                {datePresets.map(preset => (
+                    <button
+                        key={preset.label}
+                        type="button"
+                        className={`btn btn-sm ${activePreset === preset.label ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => applyPreset(preset)}
+                        aria-pressed={activePreset === preset.label}
+                    >
+                        {preset.label}
+                    </button>
+                ))}
+            </div>
             <div className="filter-bar">
                 <div className="filter-group">
                     <label className="filter-label">From</label>
