@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0](https://github.com/muecahit94/klog-dashboard/compare/v1.4.0...v1.5.0) (2026-07-09)
+
+
+### Features
+
+* add support for excluding tags from calculations and UI settings ([f356cab](https://github.com/muecahit94/klog-dashboard/commit/f356cabd7d1c64597d239d771b06c32beae6cb13))
+* add support for excluding tags from calculations and UI settings ([15eda8c](https://github.com/muecahit94/klog-dashboard/commit/15eda8ca81b97dee5455e5db8e9cbd00229bd673))
+
 ## [1.4.0](https://github.com/muecahit94/klog-dashboard/compare/v1.3.0...v1.4.0) (2026-07-09)
 
 
