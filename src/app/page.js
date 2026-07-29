@@ -18,6 +18,11 @@ const THEME_KEY = 'klog-dashboard-theme';
 const EXCLUDE_KEY = 'klog-dashboard-excluded-tags';
 const BILLABLE_KEY = 'klog-dashboard-billable-tags';
 const BILLABLE_TARGET_KEY = 'klog-dashboard-billable-target';
+// Snapshots of the last env-provided value applied, so a changed docker/env
+// variable overrides a stale localStorage value while user edits still persist.
+const EXCLUDE_ENV_KEY = 'klog-dashboard-excluded-tags-env';
+const BILLABLE_ENV_KEY = 'klog-dashboard-billable-tags-env';
+const BILLABLE_TARGET_ENV_KEY = 'klog-dashboard-billable-target-env';
 
 export default function Home() {
     const [records, setRecords] = useState([]);
@@ -80,41 +85,6 @@ export default function Home() {
         setExcludeLoaded(true);
     }, []);
 
-    // Seed from env-provided config default only if the user never set their own list
-    useEffect(() => {
-        if (!excludeLoaded || !config) return;
-        let stored = null;
-        try {
-            stored = localStorage.getItem(EXCLUDE_KEY);
-        } catch (e) {
-            // ignore
-        }
-        if (stored === null && Array.isArray(config.excludedTags) && config.excludedTags.length > 0) {
-            setExcludedTags(config.excludedTags);
-        }
-    }, [config, excludeLoaded]);
-
-    // Persist excluded tags across sessions
-    useEffect(() => {
-        if (!excludeLoaded) return;
-        try {
-            localStorage.setItem(EXCLUDE_KEY, JSON.stringify(excludedTags));
-        } catch (e) {
-            // ignore
-        }
-    }, [excludedTags, excludeLoaded]);
-
-    const addExcludedTag = useCallback((raw) => {
-        const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
-        if (!name) return;
-        setExcludedTags(prev => (prev.includes(name) ? prev : [...prev, name]));
-        setExcludeInput('');
-    }, []);
-
-    const removeExcludedTag = useCallback((name) => {
-        setExcludedTags(prev => prev.filter(t => t !== name));
-    }, []);
-
     // Load persisted billable tags on mount
     useEffect(() => {
         try {
@@ -129,40 +99,108 @@ export default function Home() {
         setBillableLoaded(true);
     }, []);
 
-    // Seed billable tags from env-provided config default only if the user never set their own list
+    // Apply the env default (KLOG_EXCLUDED_TAGS) whenever it changes, overriding
+    // any stale localStorage value. A snapshot of the last applied env value is
+    // kept so the user's own edits persist between env changes.
     useEffect(() => {
-        if (!billableLoaded || !config) return;
-        let stored = null;
+        if (!excludeLoaded || !config) return;
+        const envTags = Array.isArray(config.excludedTags) ? config.excludedTags : [];
+        const envSnap = JSON.stringify(envTags);
+        let storedSnap = null;
         try {
-            stored = localStorage.getItem(BILLABLE_KEY);
+            storedSnap = localStorage.getItem(EXCLUDE_ENV_KEY);
         } catch (e) {
             // ignore
         }
-        if (stored === null && Array.isArray(config.billableTags) && config.billableTags.length > 0) {
-            setBillableTags(config.billableTags);
+        if (storedSnap !== envSnap) {
+            setExcludedTags(envTags);
+            try {
+                localStorage.setItem(EXCLUDE_KEY, envSnap);
+                localStorage.setItem(EXCLUDE_ENV_KEY, envSnap);
+            } catch (e) {
+                // ignore
+            }
+        }
+    }, [config, excludeLoaded]);
+
+    const persistExcluded = useCallback((next) => {
+        try {
+            localStorage.setItem(EXCLUDE_KEY, JSON.stringify(next));
+        } catch (e) {
+            // ignore
+        }
+    }, []);
+
+    const addExcludedTag = useCallback((raw) => {
+        const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
+        if (!name) return;
+        setExcludedTags(prev => {
+            if (prev.includes(name)) return prev;
+            const next = [...prev, name];
+            persistExcluded(next);
+            return next;
+        });
+        setExcludeInput('');
+    }, [persistExcluded]);
+
+    const removeExcludedTag = useCallback((name) => {
+        setExcludedTags(prev => {
+            const next = prev.filter(t => t !== name);
+            persistExcluded(next);
+            return next;
+        });
+    }, [persistExcluded]);
+
+    // Apply the env default (KLOG_BILLABLE_TAGS) whenever it changes, overriding
+    // any stale localStorage value; user edits persist between env changes.
+    useEffect(() => {
+        if (!billableLoaded || !config) return;
+        const envTags = Array.isArray(config.billableTags) ? config.billableTags : [];
+        const envSnap = JSON.stringify(envTags);
+        let storedSnap = null;
+        try {
+            storedSnap = localStorage.getItem(BILLABLE_ENV_KEY);
+        } catch (e) {
+            // ignore
+        }
+        if (storedSnap !== envSnap) {
+            setBillableTags(envTags);
+            try {
+                localStorage.setItem(BILLABLE_KEY, envSnap);
+                localStorage.setItem(BILLABLE_ENV_KEY, envSnap);
+            } catch (e) {
+                // ignore
+            }
         }
     }, [config, billableLoaded]);
 
-    // Persist billable tags across sessions
-    useEffect(() => {
-        if (!billableLoaded) return;
+    const persistBillable = useCallback((next) => {
         try {
-            localStorage.setItem(BILLABLE_KEY, JSON.stringify(billableTags));
+            localStorage.setItem(BILLABLE_KEY, JSON.stringify(next));
         } catch (e) {
             // ignore
         }
-    }, [billableTags, billableLoaded]);
+    }, []);
 
     const addBillableTag = useCallback((raw) => {
         const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
         if (!name) return;
-        setBillableTags(prev => (prev.includes(name) ? prev : [...prev, name]));
+        setBillableTags(prev => {
+            if (prev.includes(name)) return prev;
+            const next = [...prev, name];
+            persistBillable(next);
+            return next;
+        });
         setBillableInput('');
-    }, []);
+    }, [persistBillable]);
 
     const removeBillableTag = useCallback((name) => {
-        setBillableTags(prev => prev.filter(t => t !== name));
-    }, []);
+        setBillableTags(prev => {
+            const next = prev.filter(t => t !== name);
+            persistBillable(next);
+            return next;
+        });
+    }, [persistBillable]);
 
     // Load persisted billable target on mount
     useEffect(() => {
@@ -181,34 +219,34 @@ export default function Home() {
     // Seed billable target from env-provided config default only if the user never set their own
     useEffect(() => {
         if (!billableTargetLoaded || !config) return;
-        let stored = null;
+        const envVal = Math.min(Math.max(Number(config.billableTargetPercent) || 0, 0), 100);
+        const envSnap = String(envVal);
+        let storedSnap = null;
         try {
-            stored = localStorage.getItem(BILLABLE_TARGET_KEY);
+            storedSnap = localStorage.getItem(BILLABLE_TARGET_ENV_KEY);
         } catch (e) {
             // ignore
         }
-        if (stored === null && Number(config.billableTargetPercent) > 0) {
-            setBillableTarget(Math.min(Math.max(Number(config.billableTargetPercent), 0), 100));
+        if (storedSnap !== envSnap) {
+            setBillableTarget(envVal);
+            try {
+                localStorage.setItem(BILLABLE_TARGET_KEY, envSnap);
+                localStorage.setItem(BILLABLE_TARGET_ENV_KEY, envSnap);
+            } catch (e) {
+                // ignore
+            }
         }
     }, [config, billableTargetLoaded]);
 
-    // Persist billable target across sessions
-    useEffect(() => {
-        if (!billableTargetLoaded) return;
+    const updateBillableTarget = useCallback((raw) => {
+        const num = parseFloat(raw);
+        const val = isNaN(num) ? 0 : Math.min(Math.max(num, 0), 100);
+        setBillableTarget(val);
         try {
-            localStorage.setItem(BILLABLE_TARGET_KEY, String(billableTarget));
+            localStorage.setItem(BILLABLE_TARGET_KEY, String(val));
         } catch (e) {
             // ignore
         }
-    }, [billableTarget, billableTargetLoaded]);
-
-    const updateBillableTarget = useCallback((raw) => {
-        const num = parseFloat(raw);
-        if (isNaN(num)) {
-            setBillableTarget(0);
-            return;
-        }
-        setBillableTarget(Math.min(Math.max(num, 0), 100));
     }, []);
 
     // Fetch config on mount

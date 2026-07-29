@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 const DEFAULT_CONFIG = {
     dailyTargetHours: 8.0,
     excludedTags: [],
-    billableTags: ['billable'],
+    billableTags: [],
     billableTargetPercent: 0
 };
 
