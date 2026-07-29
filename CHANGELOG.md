@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2](https://github.com/muecahit94/klog-dashboard/compare/v1.7.1...v1.7.2) (2026-07-29)
+
+
+### Bug Fixes
+
+* update environment variable defaults for billable tags and enhance README documentation ([2887f32](https://github.com/muecahit94/klog-dashboard/commit/2887f32e75c434a8278cae63a020b5b1df378ce7))
+
 ## [1.7.1](https://github.com/muecahit94/klog-dashboard/compare/v1.7.0...v1.7.1) (2026-07-29)
 
 
