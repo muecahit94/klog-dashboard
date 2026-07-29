@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/muecahit94/klog-dashboard/compare/v1.7.0...v1.7.1) (2026-07-29)
+
+
+### Bug Fixes
+
+* handle cases with no billable tags in BillableSplit and Charts components ([8c52125](https://github.com/muecahit94/klog-dashboard/commit/8c521259b7ac84b5b722696b519e72be31345c9c))
+
 ## [1.7.0](https://github.com/muecahit94/klog-dashboard/compare/v1.6.0...v1.7.0) (2026-07-29)
 
 
