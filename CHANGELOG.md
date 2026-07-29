@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/muecahit94/klog-dashboard/compare/v1.6.0...v1.7.0) (2026-07-29)
+
+
+### Features
+
+* add billable vs non-billable tracking and reporting ([e2c123f](https://github.com/muecahit94/klog-dashboard/commit/e2c123f56a9045120a1defd3b5f3c8b833a4f200))
+
 ## [1.6.0](https://github.com/muecahit94/klog-dashboard/compare/v1.5.0...v1.6.0) (2026-07-28)
 
 
