@@ -396,6 +396,180 @@ export function aggregateCumulativeBalance(records, targetMinutes = 480) {
         });
 }
 
+/**
+ * Split total tracked time into billable vs non-billable based on tag names.
+ * An entry is billable when any of its tags (entry-level or inherited
+ * record-level) matches a configured billable tag. Records without entries
+ * are classified by their record-level tags.
+ * Tag matching is by name, case-insensitive, and a leading '#' is ignored.
+ * @param {Array} records
+ * @param {Array<string>} billableTags
+ * @returns {{billableMinutes:number, nonBillableMinutes:number, totalMinutes:number, billablePercent:number, billableHours:number, nonBillableHours:number}}
+ */
+export function aggregateBillable(records, billableTags = []) {
+    const billable = new Set(
+        (billableTags || []).map(t => String(t).replace(/^#/, '').toLowerCase()).filter(Boolean)
+    );
+
+    const isBillable = (tags) => (tags || []).some(t => {
+        const name = typeof t === 'string' ? t : t.name;
+        return billable.has(String(name || '').toLowerCase());
+    });
+
+    let billableMinutes = 0;
+    let nonBillableMinutes = 0;
+
+    for (const r of records) {
+        if (r.entries.length === 0) {
+            if (isBillable(r.tags)) billableMinutes += r.totalMinutes;
+            else nonBillableMinutes += r.totalMinutes;
+            continue;
+        }
+        for (const e of r.entries) {
+            const tags = (e.allTags && e.allTags.length)
+                ? e.allTags
+                : [...(e.tags || []), ...(r.tags || [])];
+            if (isBillable(tags)) billableMinutes += e.minutes;
+            else nonBillableMinutes += e.minutes;
+        }
+    }
+
+    const totalMinutes = billableMinutes + nonBillableMinutes;
+    const billablePercent = totalMinutes > 0 ? (billableMinutes / totalMinutes) * 100 : 0;
+
+    return {
+        billableMinutes,
+        nonBillableMinutes,
+        totalMinutes,
+        billablePercent,
+        billableHours: minutesToDecimalHours(billableMinutes),
+        nonBillableHours: minutesToDecimalHours(nonBillableMinutes),
+    };
+}
+
+/**
+ * Break down billable time by tag, showing each tag's share of the total
+ * billable minutes. Only billable entries (those carrying a billable tag) are
+ * counted. Each billable entry is attributed to its first-level tag (the first
+ * hashtag on the entry, e.g. the client), so the split groups by first-level
+ * tag only — second-level tags are ignored.
+ * @param {Array} records
+ * @param {Array<string>} billableTags
+ * @returns {Array<{tag:string, minutes:number, hours:number, percent:number}>} sorted by minutes desc
+ */
+export function aggregateBillableByTag(records, billableTags = []) {
+    const billable = new Set(
+        (billableTags || []).map(t => String(t).replace(/^#/, '').toLowerCase()).filter(Boolean)
+    );
+
+    const isBillable = (tags) => (tags || []).some(t => {
+        const name = typeof t === 'string' ? t : t.name;
+        return billable.has(String(name || '').toLowerCase());
+    });
+
+    // Attribute to the entry's first-level tag (first hashtag). Second-level and
+    // later tags are ignored on purpose.
+    const attributionTag = (tags) => {
+        const first = (tags || [])[0];
+        if (!first) return '(untagged)';
+        return typeof first === 'string' ? first : first.full;
+    };
+
+    const map = {};
+    let billableMinutes = 0;
+
+    // billTags: full tag set used to decide billability (entry + record)
+    // primaryTags: tag set whose FIRST tag is the attribution (entry tags take
+    // precedence over record tags, like getPrimaryTag)
+    const add = (billTags, primaryTags, minutes) => {
+        if (minutes <= 0 || !isBillable(billTags)) return;
+        const tag = attributionTag(primaryTags);
+        map[tag] = (map[tag] || 0) + minutes;
+        billableMinutes += minutes;
+    };
+
+    for (const r of records) {
+        if (r.entries.length === 0) {
+            add(r.tags, r.tags, r.totalMinutes);
+            continue;
+        }
+        for (const e of r.entries) {
+            const billTags = (e.allTags && e.allTags.length)
+                ? e.allTags
+                : [...(e.tags || []), ...(r.tags || [])];
+            const primaryTags = (e.tags && e.tags.length) ? e.tags : (r.tags || []);
+            add(billTags, primaryTags, e.minutes);
+        }
+    }
+
+    return Object.entries(map)
+        .sort(([, a], [, b]) => b - a)
+        .map(([tag, minutes]) => ({
+            tag,
+            minutes,
+            hours: minutesToDecimalHours(minutes),
+            percent: billableMinutes > 0 ? (minutes / billableMinutes) * 100 : 0,
+        }));
+}
+
+/**
+ * Aggregate billable vs non-billable minutes per time period (day/week/month).
+ * Billability is decided per entry from its full tag set (entry + record).
+ * @param {Array} records
+ * @param {Array<string>} billableTags
+ * @param {'daily'|'weekly'|'monthly'} period
+ * @returns {Array<{key:string, billableMinutes:number, nonBillableMinutes:number, billableHours:number, nonBillableHours:number}>} sorted by key asc
+ */
+export function aggregateBillableByPeriod(records, billableTags = [], period = 'daily') {
+    const billable = new Set(
+        (billableTags || []).map(t => String(t).replace(/^#/, '').toLowerCase()).filter(Boolean)
+    );
+
+    const isBillable = (tags) => (tags || []).some(t => {
+        const name = typeof t === 'string' ? t : t.name;
+        return billable.has(String(name || '').toLowerCase());
+    });
+
+    const keyFn = (r) => {
+        if (period === 'monthly') return r.date.slice(0, 7);
+        if (period === 'weekly') {
+            const d = new Date(r.date);
+            const weekStart = new Date(d);
+            weekStart.setDate(d.getDate() - d.getDay() + 1); // Monday
+            return weekStart.toISOString().slice(0, 10);
+        }
+        return r.date;
+    };
+
+    const map = {};
+    for (const r of records) {
+        const key = keyFn(r);
+        if (!map[key]) map[key] = { billable: 0, nonBillable: 0 };
+        if (r.entries.length === 0) {
+            if (isBillable(r.tags)) map[key].billable += r.totalMinutes;
+            else map[key].nonBillable += r.totalMinutes;
+            continue;
+        }
+        for (const e of r.entries) {
+            const tags = (e.allTags && e.allTags.length)
+                ? e.allTags
+                : [...(e.tags || []), ...(r.tags || [])];
+            if (isBillable(tags)) map[key].billable += e.minutes;
+            else map[key].nonBillable += e.minutes;
+        }
+    }
+
+    return Object.entries(map)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, v]) => ({
+            key,
+            billableMinutes: v.billable,
+            nonBillableMinutes: v.nonBillable,
+            billableHours: minutesToDecimalHours(v.billable),
+            nonBillableHours: minutesToDecimalHours(v.nonBillable),
+        }));
+}
+
 export function aggregateByTag(records) {
     const map = {};
     for (const r of records) {

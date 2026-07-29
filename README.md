@@ -12,11 +12,12 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 - **⚡ Quick Date Presets** – One-click Today, This Week, This Month, Last Month, Last 7/30 Days, This Year, and All Time.
 - **🏷️ Tag Filter** – Multi-select tags to drill into projects.
 - **🔍 Free-Text Search** – Search across all summaries, dates, and file names.
-- **📊 Interactive Charts** – Daily/weekly/monthly bar chart, tag distribution doughnut, trend line.
+- **📊 Interactive Charts** – Daily/weekly/monthly bar chart (stack by tag or by **billable/non-billable**), tag distribution doughnut, trend line.
 - **🗓️ Activity Heatmap** – GitHub-style contribution heatmap.
 - **📋 Entries Table** – Sortable, paginated table of all entries with clickable tags.
 - **📈 Tag Breakdown** – Visual bar chart of time per tag.
-- **📥 Export** – Export filtered data as CSV or JSON.
+- **💰 Billable vs Non-billable** – Split of billable vs non-billable time, colored per tag, with an optional billable-percentage goal.
+- **�📥 Export** – Export filtered data as CSV or JSON.
 - **⚡ Keyboard Shortcuts** – `⌘O` to import, `Esc` to clear filters.
 - **✨ Demo Data** – Built-in sample data to explore the dashboard immediately.
 
@@ -82,6 +83,8 @@ The dashboard is configured via environment variables.
 | `KLOG_DATA_DIR` | Directory containing `.klg`, `.klog`, `.txt` files | `./data` |
 | `KLOG_DAILY_TARGET_HOURS` | Daily work hours target for "Should vs Actual" | `8.0` |
 | `KLOG_EXCLUDED_TAGS` | Comma-separated tags excluded from all calculations (e.g. `vacation,sickleave,holiday`) | _(empty)_ |
+| `KLOG_BILLABLE_TAGS` | Comma-separated tags counted as billable in the Billable vs Non-billable split | `billable` |
+| `KLOG_BILLABLE_TARGET_PERCENT` | Target billable percentage goal (0-100; 0 disables it) | `0` |
 
 A `.env.example` file is provided for reference. You can copy it to `.env` or set these variables in your shell/docker container.
 

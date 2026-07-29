@@ -1,8 +1,8 @@
 'use client';
 
-import { minutesToDecimalHours } from '@/lib/klogParser';
+import { minutesToDecimalHours, aggregateBillable } from '@/lib/klogParser';
 
-export default function SummaryCards({ records, config }) {
+export default function SummaryCards({ records, config, billableTags = [] }) {
     // Calculate from entries (not r.totalMinutes) so filtered records show correct totals
     const totalMinutes = records.reduce((sum, r) =>
         sum + r.entries.reduce((eSum, e) => eSum + (e.minutes || 0), 0), 0);
@@ -29,6 +29,8 @@ export default function SummaryCards({ records, config }) {
     const diff = totalMinutes - shouldTotalMin;
 
     const totalEntries = records.reduce((sum, r) => sum + r.entries.length, 0);
+
+    const billable = aggregateBillable(records, billableTags);
 
     const cards = [
         {
@@ -62,6 +64,14 @@ export default function SummaryCards({ records, config }) {
             label: 'Should vs Actual',
         },
     ];
+
+    if (billableTags.length > 0 && billable.totalMinutes > 0) {
+        cards.push({
+            icon: '💰',
+            value: billable.billablePercent.toFixed(1) + '%',
+            label: `Billable · ${billable.billableHours.toFixed(2)}h`,
+        });
+    }
 
     return (
         <div className="summary-grid animate-slide-up">

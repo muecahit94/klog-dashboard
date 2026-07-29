@@ -6,6 +6,7 @@ import FileImport from '@/components/FileImport';
 import FilterBar from '@/components/FilterBar';
 import SummaryCards from '@/components/SummaryCards';
 import Charts from '@/components/Charts';
+import BillableSplit from '@/components/BillableSplit';
 import Heatmap from '@/components/Heatmap';
 import EntriesTable from '@/components/EntriesTable';
 import { filterRecords, getAllTags, excludeTagsFromRecords, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
@@ -15,6 +16,8 @@ import pkg from '../../package.json';
 const STORAGE_KEY = 'klog-dashboard-records';
 const THEME_KEY = 'klog-dashboard-theme';
 const EXCLUDE_KEY = 'klog-dashboard-excluded-tags';
+const BILLABLE_KEY = 'klog-dashboard-billable-tags';
+const BILLABLE_TARGET_KEY = 'klog-dashboard-billable-target';
 
 export default function Home() {
     const [records, setRecords] = useState([]);
@@ -31,6 +34,11 @@ export default function Home() {
     const [excludeLoaded, setExcludeLoaded] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [excludeInput, setExcludeInput] = useState('');
+    const [billableTags, setBillableTags] = useState([]);
+    const [billableLoaded, setBillableLoaded] = useState(false);
+    const [billableInput, setBillableInput] = useState('');
+    const [billableTarget, setBillableTarget] = useState(0);
+    const [billableTargetLoaded, setBillableTargetLoaded] = useState(false);
 
     // Load persisted theme and apply it to the document root
     useEffect(() => {
@@ -105,6 +113,102 @@ export default function Home() {
 
     const removeExcludedTag = useCallback((name) => {
         setExcludedTags(prev => prev.filter(t => t !== name));
+    }, []);
+
+    // Load persisted billable tags on mount
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(BILLABLE_KEY);
+            if (raw !== null) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) setBillableTags(parsed);
+            }
+        } catch (e) {
+            // ignore
+        }
+        setBillableLoaded(true);
+    }, []);
+
+    // Seed billable tags from env-provided config default only if the user never set their own list
+    useEffect(() => {
+        if (!billableLoaded || !config) return;
+        let stored = null;
+        try {
+            stored = localStorage.getItem(BILLABLE_KEY);
+        } catch (e) {
+            // ignore
+        }
+        if (stored === null && Array.isArray(config.billableTags) && config.billableTags.length > 0) {
+            setBillableTags(config.billableTags);
+        }
+    }, [config, billableLoaded]);
+
+    // Persist billable tags across sessions
+    useEffect(() => {
+        if (!billableLoaded) return;
+        try {
+            localStorage.setItem(BILLABLE_KEY, JSON.stringify(billableTags));
+        } catch (e) {
+            // ignore
+        }
+    }, [billableTags, billableLoaded]);
+
+    const addBillableTag = useCallback((raw) => {
+        const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
+        if (!name) return;
+        setBillableTags(prev => (prev.includes(name) ? prev : [...prev, name]));
+        setBillableInput('');
+    }, []);
+
+    const removeBillableTag = useCallback((name) => {
+        setBillableTags(prev => prev.filter(t => t !== name));
+    }, []);
+
+    // Load persisted billable target on mount
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(BILLABLE_TARGET_KEY);
+            if (raw !== null) {
+                const parsed = parseFloat(raw);
+                if (!isNaN(parsed)) setBillableTarget(Math.min(Math.max(parsed, 0), 100));
+            }
+        } catch (e) {
+            // ignore
+        }
+        setBillableTargetLoaded(true);
+    }, []);
+
+    // Seed billable target from env-provided config default only if the user never set their own
+    useEffect(() => {
+        if (!billableTargetLoaded || !config) return;
+        let stored = null;
+        try {
+            stored = localStorage.getItem(BILLABLE_TARGET_KEY);
+        } catch (e) {
+            // ignore
+        }
+        if (stored === null && Number(config.billableTargetPercent) > 0) {
+            setBillableTarget(Math.min(Math.max(Number(config.billableTargetPercent), 0), 100));
+        }
+    }, [config, billableTargetLoaded]);
+
+    // Persist billable target across sessions
+    useEffect(() => {
+        if (!billableTargetLoaded) return;
+        try {
+            localStorage.setItem(BILLABLE_TARGET_KEY, String(billableTarget));
+        } catch (e) {
+            // ignore
+        }
+    }, [billableTarget, billableTargetLoaded]);
+
+    const updateBillableTarget = useCallback((raw) => {
+        const num = parseFloat(raw);
+        if (isNaN(num)) {
+            setBillableTarget(0);
+            return;
+        }
+        setBillableTarget(Math.min(Math.max(num, 0), 100));
     }, []);
 
     // Fetch config on mount
@@ -310,13 +414,16 @@ export default function Home() {
                     />
 
                     {/* Summary Stats */}
-                    <SummaryCards records={filteredRecords} config={config} />
+                    <SummaryCards records={filteredRecords} config={config} billableTags={billableTags} />
+
+                    {/* Billable vs Non-billable split */}
+                    <BillableSplit records={filteredRecords} billableTags={billableTags} billableTarget={billableTarget} />
 
                     {/* Charts */}
-                    <Charts records={filteredRecords} config={config} />
+                    <Charts records={filteredRecords} config={config} billableTags={billableTags} />
 
                     {/* Heatmap */}
-                    <Heatmap records={filteredRecords} />
+                    <Heatmap records={filteredRecords} billableTags={billableTags} />
 
                     {/* Entries Table */}
                     <EntriesTable records={filteredRecords} onTagClick={handleTagClick} />
@@ -452,6 +559,77 @@ export default function Home() {
                                         </span>
                                     ))
                                 )}
+                            </div>
+                        </section>
+
+                        {/* Billable tags */}
+                        <section style={{ marginTop: '22px' }}>
+                            <h3 style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Billable Tags
+                            </h3>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                                Time tagged with any of these counts as billable in the
+                                Billable vs Non-billable split (e.g. billable, client). Saved automatically.
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                                <input
+                                    className="filter-input"
+                                    placeholder="e.g. billable, client"
+                                    value={billableInput}
+                                    onChange={(e) => setBillableInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            addBillableTag(billableInput);
+                                        }
+                                    }}
+                                    style={{ flex: 1, minWidth: 0 }}
+                                />
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => addBillableTag(billableInput)}
+                                >
+                                    Add
+                                </button>
+                            </div>
+                            <div className="filter-chips" style={{ marginBottom: 0 }}>
+                                {billableTags.length === 0 ? (
+                                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        No billable tags
+                                    </span>
+                                ) : (
+                                    billableTags.map(tag => (
+                                        <span key={tag} className="filter-chip">
+                                            #{tag}
+                                            <button onClick={() => removeBillableTag(tag)}>×</button>
+                                        </span>
+                                    ))
+                                )}
+                            </div>
+                        </section>
+
+                        {/* Billable goal */}
+                        <section style={{ marginTop: '22px' }}>
+                            <h3 style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Billable Goal
+                            </h3>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                                Target billable percentage. Shown as a marker on the split bar
+                                with over/under status. Set to 0 to disable. Saved automatically.
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <input
+                                    className="filter-input"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    placeholder="0"
+                                    value={billableTarget || ''}
+                                    onChange={(e) => updateBillableTarget(e.target.value)}
+                                    style={{ width: '110px' }}
+                                />
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>% billable</span>
                             </div>
                         </section>
                     </div>

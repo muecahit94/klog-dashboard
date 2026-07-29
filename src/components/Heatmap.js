@@ -4,8 +4,9 @@ import { useMemo, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { minutesToDecimalHours } from '@/lib/klogParser';
 
-export default function Heatmap({ records }) {
+export default function Heatmap({ records, billableTags = [] }) {
     const [tooltip, setTooltip] = useState(null);
+    const [mode, setMode] = useState('activity');
 
     const handleMouseMove = useCallback((e, day) => {
         setTooltip({
@@ -13,6 +14,9 @@ export default function Heatmap({ records }) {
             y: e.clientY,
             date: day.date,
             hours: day.hours,
+            minutes: day.minutes,
+            billableHours: day.billableHours,
+            billablePct: day.billablePct,
         });
     }, []);
 
@@ -22,6 +26,14 @@ export default function Heatmap({ records }) {
 
     const heatmapData = useMemo(() => {
         if (records.length === 0) return { weeks: [], monthLabels: [] };
+
+        const billable = new Set(
+            (billableTags || []).map(t => String(t).replace(/^#/, '').toLowerCase()).filter(Boolean)
+        );
+        const isBillable = (tags) => (tags || []).some(t => {
+            const name = typeof t === 'string' ? t : t.name;
+            return billable.has(String(name || '').toLowerCase());
+        });
 
         // Get date range
         const dates = records.map(r => r.date).sort();
@@ -35,15 +47,39 @@ export default function Heatmap({ records }) {
         const endDate = new Date(maxDate);
         endDate.setDate(endDate.getDate() + (7 - ((endDate.getDay() + 6) % 7)) % 7); // Sunday
 
-        // Build daily hours map (calculate from entries for filtered accuracy)
+        // Build daily totals: total minutes + billable minutes (entries-based)
         const dayMap = {};
         for (const r of records) {
-            if (!dayMap[r.date]) dayMap[r.date] = 0;
-            dayMap[r.date] += r.entries.reduce((sum, e) => sum + (e.minutes || 0), 0);
+            const day = dayMap[r.date] || (dayMap[r.date] = { total: 0, billable: 0 });
+            for (const e of r.entries) {
+                day.total += e.minutes || 0;
+                const tags = (e.allTags && e.allTags.length)
+                    ? e.allTags
+                    : [...(e.tags || []), ...(r.tags || [])];
+                if (isBillable(tags)) day.billable += e.minutes || 0;
+            }
         }
 
-        // Find max for level calculation
-        const maxMinutes = Math.max(...Object.values(dayMap), 1);
+        // Max total for activity-level calculation
+        const maxMinutes = Math.max(...Object.values(dayMap).map(d => d.total), 1);
+
+        // Level: activity mode uses total vs max; billable mode uses billable ratio
+        const levelFor = (day) => {
+            if (day.total <= 0) return 0;
+            if (mode === 'billable') {
+                const ratio = day.billable / day.total;
+                if (ratio <= 0) return 0;
+                if (ratio <= 0.25) return 1;
+                if (ratio <= 0.5) return 2;
+                if (ratio <= 0.75) return 3;
+                return 4;
+            }
+            const ratio = day.total / maxMinutes;
+            if (ratio <= 0.25) return 1;
+            if (ratio <= 0.5) return 2;
+            if (ratio <= 0.75) return 3;
+            return 4;
+        };
 
         // Generate weeks
         const weeks = [];
@@ -55,19 +91,14 @@ export default function Heatmap({ records }) {
             const week = [];
             for (let d = 0; d < 7; d++) {
                 const dateStr = currentDate.toISOString().slice(0, 10);
-                const minutes = dayMap[dateStr] || 0;
+                const rec = dayMap[dateStr] || { total: 0, billable: 0 };
+                const minutes = rec.total;
                 const hours = minutesToDecimalHours(minutes);
+                const billableHours = minutesToDecimalHours(rec.billable);
+                const billablePct = minutes > 0 ? (rec.billable / minutes) * 100 : 0;
+                const level = levelFor(rec);
 
-                let level = 0;
-                if (minutes > 0) {
-                    const ratio = minutes / maxMinutes;
-                    if (ratio <= 0.25) level = 1;
-                    else if (ratio <= 0.5) level = 2;
-                    else if (ratio <= 0.75) level = 3;
-                    else level = 4;
-                }
-
-                week.push({ date: dateStr, minutes, hours, level });
+                week.push({ date: dateStr, minutes, hours, billableHours, billablePct, level });
 
                 // Track month labels
                 const month = currentDate.getMonth();
@@ -85,7 +116,7 @@ export default function Heatmap({ records }) {
         }
 
         return { weeks, monthLabels };
-    }, [records]);
+    }, [records, mode, billableTags]);
 
     if (records.length === 0) return null;
 
@@ -95,6 +126,22 @@ export default function Heatmap({ records }) {
         <div className="chart-card full-width animate-slide-up">
             <div className="chart-header">
                 <h3 className="chart-title">Activity Heatmap</h3>
+                {billableTags.length > 0 && (
+                    <div className="chart-toggle">
+                        <button
+                            className={mode === 'activity' ? 'active' : ''}
+                            onClick={() => setMode('activity')}
+                        >
+                            Hours
+                        </button>
+                        <button
+                            className={mode === 'billable' ? 'active' : ''}
+                            onClick={() => setMode('billable')}
+                        >
+                            Billable %
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="heatmap-container">
@@ -137,11 +184,11 @@ export default function Heatmap({ records }) {
 
                 {/* Legend */}
                 <div className="heatmap-legend">
-                    <span>Less</span>
+                    <span>{mode === 'billable' ? '0%' : 'Less'}</span>
                     {[0, 1, 2, 3, 4].map(level => (
                         <div key={level} className={`heatmap-cell level-${level}`} style={{ cursor: 'default' }} />
                     ))}
-                    <span>More</span>
+                    <span>{mode === 'billable' ? '100%' : 'More'}</span>
                 </div>
             </div>
 
@@ -165,6 +212,9 @@ export default function Heatmap({ records }) {
                     }}
                 >
                     <strong>{tooltip.date}</strong>: {tooltip.hours.toFixed(2)}h
+                    {mode === 'billable' && tooltip.minutes > 0 && (
+                        <> · {tooltip.billablePct.toFixed(0)}% billable ({tooltip.billableHours.toFixed(2)}h)</>
+                    )}
                 </div>,
                 document.body
             )}

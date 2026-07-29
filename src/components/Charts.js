@@ -18,7 +18,8 @@ import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
     aggregateByDate, aggregateByWeek, aggregateByMonth,
     aggregateByDateWithTags, aggregateByWeekWithTags, aggregateByMonthWithTags,
-    aggregateByTagGrouped, aggregateCumulativeBalance, formatMinutes, minutesToDecimalHours,
+    aggregateByTagGrouped, aggregateCumulativeBalance, aggregateBillableByPeriod,
+    formatMinutes, minutesToDecimalHours,
 } from '@/lib/klogParser';
 
 ChartJS.register(
@@ -75,9 +76,10 @@ const chartDefaults = {
     },
 };
 
-export default function Charts({ records, config }) {
+export default function Charts({ records, config, billableTags = [] }) {
     const [timeMode, setTimeMode] = useState('daily');
     const [showTags, setShowTags] = useState(false);
+    const [showBillable, setShowBillable] = useState(false);
 
     const dailyData = useMemo(() => aggregateByDate(records), [records]);
     const weeklyData = useMemo(() => aggregateByWeek(records), [records]);
@@ -87,6 +89,11 @@ export default function Charts({ records, config }) {
     const dailyTagData = useMemo(() => aggregateByDateWithTags(records), [records]);
     const weeklyTagData = useMemo(() => aggregateByWeekWithTags(records), [records]);
     const monthlyTagData = useMemo(() => aggregateByMonthWithTags(records), [records]);
+
+    const billableTimeData = useMemo(
+        () => aggregateBillableByPeriod(records, billableTags, timeMode),
+        [records, billableTags, timeMode],
+    );
 
     const timeData = timeMode === 'daily' ? dailyData :
         timeMode === 'weekly' ? weeklyData : monthlyData;
@@ -138,32 +145,69 @@ export default function Charts({ records, config }) {
         return { labels, datasets };
     }, [showTags, timeTagData, timeMode]);
 
-    const barChartData = showTags && stackedChartData ? stackedChartData : {
-        labels: timeData.map(d => {
-            const val = d[labelKey];
-            if (timeMode === 'daily' && val) return val.slice(5); // MM-DD
+    // Billable vs non-billable stacked per period
+    const billableChartData = useMemo(() => {
+        if (!showBillable || billableTimeData.length === 0) return null;
+        const labels = billableTimeData.map(d => {
+            const val = d.key;
+            if (timeMode === 'daily' && val) return val.slice(5);
             if (timeMode === 'weekly' && val) return 'W ' + val.slice(5);
             return val;
-        }),
-        datasets: [{
-            label: 'Hours',
-            data: timeData.map(d => d.hours),
-            backgroundColor: 'rgba(99, 102, 241, 0.6)',
-            borderColor: 'rgba(99, 102, 241, 1)',
-            borderWidth: 1,
-            borderRadius: 4,
-            hoverBackgroundColor: 'rgba(99, 102, 241, 0.8)',
-            order: 2,
-        },
-        ],
-    };
+        });
+        return {
+            labels,
+            datasets: [
+                {
+                    label: 'Billable',
+                    data: billableTimeData.map(d => d.billableHours),
+                    backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                    borderColor: '#10b981',
+                    borderWidth: 1,
+                    borderRadius: 2,
+                    _billable: true,
+                },
+                {
+                    label: 'Non-billable',
+                    data: billableTimeData.map(d => d.nonBillableHours),
+                    backgroundColor: 'rgba(139, 143, 163, 0.45)',
+                    borderColor: '#8b8fa3',
+                    borderWidth: 1,
+                    borderRadius: 2,
+                    _billable: false,
+                },
+            ],
+        };
+    }, [showBillable, billableTimeData, timeMode]);
+
+    const stacked = showTags || showBillable;
+
+    const barChartData = showBillable && billableChartData ? billableChartData
+        : showTags && stackedChartData ? stackedChartData : {
+            labels: timeData.map(d => {
+                const val = d[labelKey];
+                if (timeMode === 'daily' && val) return val.slice(5); // MM-DD
+                if (timeMode === 'weekly' && val) return 'W ' + val.slice(5);
+                return val;
+            }),
+            datasets: [{
+                label: 'Hours',
+                data: timeData.map(d => d.hours),
+                backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                borderColor: 'rgba(99, 102, 241, 1)',
+                borderWidth: 1,
+                borderRadius: 4,
+                hoverBackgroundColor: 'rgba(99, 102, 241, 0.8)',
+                order: 2,
+            },
+            ],
+        };
 
     const barChartOptions = {
         ...chartDefaults,
         plugins: {
             ...chartDefaults.plugins,
             legend: {
-                display: showTags,
+                display: stacked,
                 position: 'top',
                 labels: {
                     color: '#8b8fa3',
@@ -176,10 +220,14 @@ export default function Charts({ records, config }) {
             },
             tooltip: {
                 ...chartDefaults.plugins.tooltip,
-                mode: showTags ? 'index' : 'nearest',
+                mode: stacked ? 'index' : 'nearest',
                 callbacks: {
                     label: (ctx) => {
                         const val = ctx.parsed.y;
+                        if (showBillable) {
+                            if (val === 0) return null;
+                            return ` ${ctx.dataset.label}: ${val.toFixed(2)}h`;
+                        }
                         if (showTags && val === 0) return null;
                         return showTags ? ` ${ctx.dataset.label}: ${val.toFixed(2)}h` : `${val.toFixed(2)}h`;
                     },
@@ -199,6 +247,15 @@ export default function Charts({ records, config }) {
                             return `    › #${child}: ${hrs.toFixed(2)}h (${pct}%)`;
                         });
                     },
+                    footer: (items) => {
+                        if (!showBillable || items.length === 0) return undefined;
+                        const d = billableTimeData[items[0].dataIndex];
+                        if (!d) return undefined;
+                        const total = d.billableMinutes + d.nonBillableMinutes;
+                        if (total <= 0) return undefined;
+                        const pct = ((d.billableMinutes / total) * 100).toFixed(1);
+                        return `Billable: ${pct}% of ${minutesToDecimalHours(total).toFixed(2)}h`;
+                    },
                 },
             },
         },
@@ -206,11 +263,11 @@ export default function Charts({ records, config }) {
             ...chartDefaults.scales,
             x: {
                 ...chartDefaults.scales.x,
-                stacked: showTags,
+                stacked,
             },
             y: {
                 ...chartDefaults.scales.y,
-                stacked: showTags,
+                stacked,
             },
         },
     };
@@ -293,7 +350,11 @@ export default function Charts({ records, config }) {
                             </button>
                         ))}
                         <label
-                            onClick={() => setShowTags(v => !v)}
+                            onClick={() => setShowTags(v => {
+                                const next = !v;
+                                if (next) setShowBillable(false);
+                                return next;
+                            })}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -331,6 +392,50 @@ export default function Charts({ records, config }) {
                                 }} />
                             </span>
                             Tags
+                        </label>
+                        <label
+                            onClick={() => setShowBillable(v => {
+                                const next = !v;
+                                if (next) setShowTags(false);
+                                return next;
+                            })}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                fontSize: '12px',
+                                color: showBillable ? '#f0f1f5' : 'var(--text-muted)',
+                                cursor: 'pointer',
+                                marginLeft: '10px',
+                                userSelect: 'none',
+                                transition: 'color 0.2s',
+                            }}
+                        >
+                            <span style={{
+                                position: 'relative',
+                                width: '32px',
+                                height: '18px',
+                                borderRadius: '9px',
+                                background: showBillable
+                                    ? 'linear-gradient(135deg, #10b981, #06b6d4)'
+                                    : 'rgba(255, 255, 255, 0.1)',
+                                transition: 'background 0.25s ease',
+                                boxShadow: showBillable ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
+                                flexShrink: 0,
+                            }}>
+                                <span style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    left: showBillable ? '16px' : '2px',
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '50%',
+                                    background: '#fff',
+                                    transition: 'left 0.25s ease',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                }} />
+                            </span>
+                            Billable
                         </label>
                     </div>
                 </div>
