@@ -147,7 +147,7 @@ export default function Charts({ records, config, billableTags = [] }) {
 
     // Billable vs non-billable stacked per period
     const billableChartData = useMemo(() => {
-        if (!showBillable || billableTimeData.length === 0) return null;
+        if (!showBillable || billableTags.length === 0 || billableTimeData.length === 0) return null;
         const labels = billableTimeData.map(d => {
             const val = d.key;
             if (timeMode === 'daily' && val) return val.slice(5);
@@ -177,11 +177,12 @@ export default function Charts({ records, config, billableTags = [] }) {
                 },
             ],
         };
-    }, [showBillable, billableTimeData, timeMode]);
+    }, [showBillable, billableTags, billableTimeData, timeMode]);
 
-    const stacked = showTags || showBillable;
+    const billableActive = showBillable && billableTags.length > 0;
+    const stacked = showTags || billableActive;
 
-    const barChartData = showBillable && billableChartData ? billableChartData
+    const barChartData = billableActive && billableChartData ? billableChartData
         : showTags && stackedChartData ? stackedChartData : {
             labels: timeData.map(d => {
                 const val = d[labelKey];
@@ -224,7 +225,7 @@ export default function Charts({ records, config, billableTags = [] }) {
                 callbacks: {
                     label: (ctx) => {
                         const val = ctx.parsed.y;
-                        if (showBillable) {
+                        if (billableActive) {
                             if (val === 0) return null;
                             return ` ${ctx.dataset.label}: ${val.toFixed(2)}h`;
                         }
@@ -248,7 +249,7 @@ export default function Charts({ records, config, billableTags = [] }) {
                         });
                     },
                     footer: (items) => {
-                        if (!showBillable || items.length === 0) return undefined;
+                        if (!billableActive || items.length === 0) return undefined;
                         const d = billableTimeData[items[0].dataIndex];
                         if (!d) return undefined;
                         const total = d.billableMinutes + d.nonBillableMinutes;
@@ -393,6 +394,7 @@ export default function Charts({ records, config, billableTags = [] }) {
                             </span>
                             Tags
                         </label>
+                        {billableTags.length > 0 && (
                         <label
                             onClick={() => setShowBillable(v => {
                                 const next = !v;
@@ -437,6 +439,7 @@ export default function Charts({ records, config, billableTags = [] }) {
                             </span>
                             Billable
                         </label>
+                        )}
                     </div>
                 </div>
                 <div className="chart-container">

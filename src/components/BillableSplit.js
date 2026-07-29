@@ -26,6 +26,7 @@ export default function BillableSplit({ records, billableTags = [], billableTarg
     );
 
     if (stats.totalMinutes <= 0) return null;
+    if (!billableTags || billableTags.length === 0) return null;
 
     const total = stats.totalMinutes;
     const billablePct = stats.billablePercent;
