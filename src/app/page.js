@@ -458,7 +458,7 @@ export default function Home() {
                     <BillableSplit records={filteredRecords} billableTags={billableTags} billableTarget={billableTarget} />
 
                     {/* Charts */}
-                    <Charts records={filteredRecords} config={config} billableTags={billableTags} />
+                    <Charts records={filteredRecords} config={config} billableTags={billableTags} billableTarget={billableTarget} />
 
                     {/* Heatmap */}
                     <Heatmap records={filteredRecords} billableTags={billableTags} />

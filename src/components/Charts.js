@@ -18,8 +18,8 @@ import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
     aggregateByDate, aggregateByWeek, aggregateByMonth,
     aggregateByDateWithTags, aggregateByWeekWithTags, aggregateByMonthWithTags,
-    aggregateByTagGrouped, aggregateCumulativeBalance, aggregateBillableByPeriod,
-    formatMinutes, minutesToDecimalHours,
+    aggregateByTagGrouped, aggregateCumulativeBalance, aggregateCumulativeBillableBalance,
+    aggregateBillableByPeriod, minutesToDecimalHours,
 } from '@/lib/klogParser';
 
 ChartJS.register(
@@ -76,10 +76,11 @@ const chartDefaults = {
     },
 };
 
-export default function Charts({ records, config, billableTags = [] }) {
+export default function Charts({ records, config, billableTags = [], billableTarget = 0 }) {
     const [timeMode, setTimeMode] = useState('daily');
     const [showTags, setShowTags] = useState(false);
     const [showBillable, setShowBillable] = useState(false);
+    const [balanceMode, setBalanceMode] = useState('total');
 
     const dailyData = useMemo(() => aggregateByDate(records), [records]);
     const weeklyData = useMemo(() => aggregateByWeek(records), [records]);
@@ -297,13 +298,28 @@ export default function Charts({ records, config, billableTags = [] }) {
         [records, targetHours],
     );
 
+    const billablePercent = Number(billableTarget) || 0;
+    const billableBalanceData = useMemo(
+        () => aggregateCumulativeBillableBalance(records, billableTags, billablePercent),
+        [records, billableTags, billablePercent],
+    );
+
+    const balanceBillable = balanceMode === 'billable' && billableTags.length > 0;
+    const activeBalanceData = balanceBillable ? billableBalanceData : balanceData;
+
+    const balanceTotals = useMemo(() => {
+        const actual = activeBalanceData.reduce((s, d) => s + d.actualMinutes, 0);
+        const target = activeBalanceData.reduce((s, d) => s + d.shouldMinutes, 0);
+        return { actual, target, diff: actual - target };
+    }, [activeBalanceData]);
+
     const balanceChartData = {
-        labels: balanceData.map(d => d.date.slice(5)),
+        labels: activeBalanceData.map(d => d.date.slice(5)),
         datasets: [{
-            label: 'Cumulative Balance',
-            data: balanceData.map(d => d.cumulativeHours),
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.12)',
+            label: balanceBillable ? 'Cumulative Billable Balance' : 'Cumulative Balance',
+            data: activeBalanceData.map(d => d.cumulativeHours),
+            borderColor: balanceBillable ? '#10b981' : '#8b5cf6',
+            backgroundColor: balanceBillable ? 'rgba(16, 185, 129, 0.12)' : 'rgba(139, 92, 246, 0.12)',
             fill: {
                 target: 'origin',
                 above: 'rgba(16, 185, 129, 0.12)',
@@ -311,7 +327,7 @@ export default function Charts({ records, config, billableTags = [] }) {
             },
             tension: 0.3,
             pointRadius: 3,
-            pointBackgroundColor: balanceData.map(d => d.cumulativeMinutes >= 0 ? '#10b981' : '#ef4444'),
+            pointBackgroundColor: activeBalanceData.map(d => d.cumulativeMinutes >= 0 ? '#10b981' : '#ef4444'),
             pointBorderColor: 'transparent',
             pointHoverRadius: 6,
             pointHoverBorderColor: '#fff',
@@ -522,9 +538,38 @@ export default function Charts({ records, config, billableTags = [] }) {
             <div className="chart-card full-width">
                 <div className="chart-header">
                     <h3 className="chart-title">Cumulative Balance</h3>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        running overtime / undertime vs target
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            <strong style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                                {minutesToDecimalHours(balanceTotals.actual).toFixed(2)}h
+                            </strong>
+                            {' '}{balanceBillable ? 'billable' : 'worked'}
+                            {' · target '}
+                            <strong style={{ color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                                {minutesToDecimalHours(balanceTotals.target).toFixed(2)}h
+                            </strong>
+                            {' '}
+                            <span style={{ color: balanceTotals.diff >= 0 ? 'var(--accent-success)' : 'var(--accent-warning)', fontVariantNumeric: 'tabular-nums' }}>
+                                ({balanceTotals.diff >= 0 ? '+' : ''}{minutesToDecimalHours(balanceTotals.diff).toFixed(2)}h)
+                            </span>
+                        </span>
+                        {billableTags.length > 0 && (
+                            <div className="chart-toggle">
+                                <button
+                                    className={balanceMode === 'total' ? 'active' : ''}
+                                    onClick={() => setBalanceMode('total')}
+                                >
+                                    Total
+                                </button>
+                                <button
+                                    className={balanceMode === 'billable' ? 'active' : ''}
+                                    onClick={() => setBalanceMode('billable')}
+                                >
+                                    Billable
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div className="chart-container" style={{ height: '220px' }}>
                     <Line data={balanceChartData} options={{
@@ -535,15 +580,29 @@ export default function Charts({ records, config, billableTags = [] }) {
                                 ...chartDefaults.plugins.tooltip,
                                 callbacks: {
                                     label: (ctx) => {
-                                        const d = balanceData[ctx.dataIndex];
+                                        const d = activeBalanceData[ctx.dataIndex];
                                         const sign = d.cumulativeMinutes >= 0 ? '+' : '';
-                                        return ` Balance: ${sign}${formatMinutes(d.cumulativeMinutes)}`;
+                                        return ` Balance: ${sign}${d.cumulativeHours.toFixed(2)}h`;
                                     },
                                     afterLabel: (ctx) => {
-                                        const d = balanceData[ctx.dataIndex];
+                                        const d = activeBalanceData[ctx.dataIndex];
                                         const sign = d.dailyMinutes >= 0 ? '+' : '';
-                                        return `  Day: ${sign}${formatMinutes(d.dailyMinutes)}`;
+                                        const lines = [`  Day: ${sign}${d.dailyHours.toFixed(2)}h`];
+                                        if (balanceBillable) {
+                                            lines.push(`  Billable: ${minutesToDecimalHours(d.actualMinutes).toFixed(2)}h · target ${minutesToDecimalHours(d.shouldMinutes).toFixed(2)}h`);
+                                        }
+                                        return lines;
                                     },
+                                },
+                            },
+                        },
+                        scales: {
+                            ...chartDefaults.scales,
+                            y: {
+                                ...chartDefaults.scales.y,
+                                ticks: {
+                                    ...chartDefaults.scales.y.ticks,
+                                    callback: (v) => (Math.round(v * 100) / 100) + 'h',
                                 },
                             },
                         },

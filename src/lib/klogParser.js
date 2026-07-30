@@ -397,6 +397,64 @@ export function aggregateCumulativeBalance(records, targetMinutes = 480) {
 }
 
 /**
+ * Aggregate the running (cumulative) BILLABLE balance per day.
+ * Daily balance = billable worked minutes - billable target minutes for that day.
+ * The billable target per day = total worked minutes that day x billablePercent%,
+ * i.e. the target is derived from the percentage of the time actually worked.
+ * Billability is decided per entry from its full tag set (entry + record).
+ * @param {Array} records
+ * @param {Array<string>} billableTags
+ * @param {number} billablePercent - Billable target percentage (0-100)
+ * @returns {Array<{date: string, actualMinutes: number, shouldMinutes: number, dailyMinutes: number, dailyHours: number, cumulativeMinutes: number, cumulativeHours: number}>}
+ */
+export function aggregateCumulativeBillableBalance(records, billableTags = [], billablePercent = 0) {
+    const billable = new Set(
+        (billableTags || []).map(t => String(t).replace(/^#/, '').toLowerCase()).filter(Boolean)
+    );
+    const isBillable = (tags) => (tags || []).some(t => {
+        const name = typeof t === 'string' ? t : t.name;
+        return billable.has(String(name || '').toLowerCase());
+    });
+
+    const byDate = {};
+    for (const r of records) {
+        if (!byDate[r.date]) byDate[r.date] = { billable: 0, total: 0 };
+        if (r.entries.length === 0) {
+            byDate[r.date].total += r.totalMinutes;
+            if (isBillable(r.tags)) byDate[r.date].billable += r.totalMinutes;
+        } else {
+            for (const e of r.entries) {
+                byDate[r.date].total += e.minutes;
+                const tags = (e.allTags && e.allTags.length)
+                    ? e.allTags
+                    : [...(e.tags || []), ...(r.tags || [])];
+                if (isBillable(tags)) byDate[r.date].billable += e.minutes;
+            }
+        }
+    }
+
+    const ratio = Math.min(Math.max(Number(billablePercent) || 0, 0), 100) / 100;
+    let cumulative = 0;
+    return Object.keys(byDate)
+        .sort((a, b) => a.localeCompare(b))
+        .map(date => {
+            const d = byDate[date];
+            const billableTarget = d.total * ratio;
+            const daily = d.billable - billableTarget;
+            cumulative += daily;
+            return {
+                date,
+                actualMinutes: d.billable,
+                shouldMinutes: billableTarget,
+                dailyMinutes: daily,
+                dailyHours: minutesToDecimalHours(daily),
+                cumulativeMinutes: cumulative,
+                cumulativeHours: minutesToDecimalHours(cumulative),
+            };
+        });
+}
+
+/**
  * Split total tracked time into billable vs non-billable based on tag names.
  * An entry is billable when any of its tags (entry-level or inherited
  * record-level) matches a configured billable tag. Records without entries
