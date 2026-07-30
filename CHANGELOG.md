@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/muecahit94/klog-dashboard/compare/v1.7.2...v1.8.0) (2026-07-30)
+
+
+### Features
+
+* add cumulative billable balance aggregation and update Charts component to utilize it ([9360728](https://github.com/muecahit94/klog-dashboard/commit/9360728b05c01c8b6ef2af7a7b9624d59bf934cf))
+
 ## [1.7.2](https://github.com/muecahit94/klog-dashboard/compare/v1.7.1...v1.7.2) (2026-07-29)
 
 
