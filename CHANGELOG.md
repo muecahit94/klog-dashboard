@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/muecahit94/klog-dashboard/compare/v1.8.0...v1.8.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* enhance Docker build workflow with multi-architecture support and digest management ([31d55e4](https://github.com/muecahit94/klog-dashboard/commit/31d55e423098e5854facc32c842270b28cee5535))
+
 ## [1.8.0](https://github.com/muecahit94/klog-dashboard/compare/v1.7.2...v1.8.0) (2026-07-30)
 
 
