@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { minutesToDecimalHours } from '@/lib/klogParser';
 
-export default function Heatmap({ records, billableTags = [] }) {
+export default function Heatmap({ records, billableTags = [], onHighlight }) {
     const [tooltip, setTooltip] = useState(null);
     const [mode, setMode] = useState('activity');
 
@@ -175,6 +175,12 @@ export default function Heatmap({ records, billableTags = [] }) {
                                         className={`heatmap-cell level-${day.level}`}
                                         onMouseMove={(e) => handleMouseMove(e, day)}
                                         onMouseLeave={handleMouseLeave}
+                                        onClick={() => {
+                                            if (day.minutes > 0) {
+                                                onHighlight?.({ kind: 'dateRange', from: day.date, to: day.date, label: day.date });
+                                            }
+                                        }}
+                                        style={day.minutes > 0 ? { cursor: 'pointer' } : undefined}
                                     />
                                 ))}
                             </div>

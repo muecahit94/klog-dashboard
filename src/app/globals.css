@@ -546,6 +546,8 @@ body::before {
   right: 0;
   height: 3px;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
+  /* Fallback so a newly added card never renders without an accent bar */
+  background: var(--gradient-primary);
 }
 
 .summary-card:nth-child(1)::before {
@@ -570,6 +572,10 @@ body::before {
 
 .summary-card:nth-child(6)::before {
   background: linear-gradient(135deg, #10b981, #6366f1);
+}
+
+.summary-card:nth-child(7)::before {
+  background: linear-gradient(135deg, #10b981, #fbbf24);
 }
 
 .summary-card:hover {
@@ -812,6 +818,77 @@ body::before {
 
 .entries-table tr:hover td {
   background: var(--bg-glass);
+}
+
+/* Drill-down highlighting from charts / heatmap / billable split */
+.entries-table tr.row-highlighted td {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.entries-table tr.row-highlighted td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent-warning);
+}
+
+.entries-table tr.row-expanded td {
+  background: var(--bg-glass);
+}
+
+.entries-table tr.row-detail td {
+  padding: 0;
+  background: var(--bg-input);
+}
+
+.entries-table tr.row-detail:hover td {
+  background: var(--bg-input);
+}
+
+.entry-detail {
+  padding: 14px 20px;
+  border-left: 3px solid var(--accent-primary);
+}
+
+.entry-detail-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  font-size: 13px;
+}
+
+.entry-detail-grid span {
+  color: var(--text-muted);
+}
+
+.entry-detail-grid strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.entry-detail-raw {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.highlight-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid var(--accent-warning);
+  border-radius: var(--radius-sm);
 }
 
 .entries-table .tag-badge {

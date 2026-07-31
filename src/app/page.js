@@ -44,6 +44,8 @@ export default function Home() {
     const [billableInput, setBillableInput] = useState('');
     const [billableTarget, setBillableTarget] = useState(0);
     const [billableTargetLoaded, setBillableTargetLoaded] = useState(false);
+    // Cross-dashboard drill-down: {kind:'dateRange',from,to,label} | {kind:'tag',value,label}
+    const [highlight, setHighlight] = useState(null);
 
     // Load persisted theme and apply it to the document root
     useEffect(() => {
@@ -299,6 +301,7 @@ export default function Home() {
             }
             if (e.key === 'Escape') {
                 setFilters({ dateFrom: '', dateTo: '', tags: [], search: '' });
+                setHighlight(null);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -344,6 +347,33 @@ export default function Home() {
             return { ...prev, tags: [...current, tagName] };
         });
     }, []);
+
+    // Clicking a chart bar, heatmap cell or billable segment highlights the
+    // matching rows in the entries table instead of narrowing the whole dashboard.
+    const handleHighlight = useCallback((next) => {
+        setHighlight(next);
+        if (typeof document !== 'undefined') {
+            requestAnimationFrame(() => {
+                document.getElementById('all-entries')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
+    }, []);
+
+    const clearHighlight = useCallback(() => setHighlight(null), []);
+
+    const applyHighlightAsFilter = useCallback(() => {
+        if (!highlight) return;
+        if (highlight.kind === 'dateRange') {
+            setFilters(prev => ({ ...prev, dateFrom: highlight.from, dateTo: highlight.to }));
+        } else if (highlight.kind === 'tag') {
+            setFilters(prev => {
+                const current = prev.tags || [];
+                if (current.includes(highlight.value)) return prev;
+                return { ...prev, tags: [...current, highlight.value] };
+            });
+        }
+        setHighlight(null);
+    }, [highlight]);
 
     const handleExportCSV = useCallback(() => {
         const headers = ['Date', 'Type', 'Duration (min)', 'Duration', 'Hours', 'Summary', 'Tags', 'File'];
@@ -455,16 +485,22 @@ export default function Home() {
                     <SummaryCards records={filteredRecords} config={config} billableTags={billableTags} />
 
                     {/* Billable vs Non-billable split */}
-                    <BillableSplit records={filteredRecords} billableTags={billableTags} billableTarget={billableTarget} />
+                    <BillableSplit records={filteredRecords} billableTags={billableTags} billableTarget={billableTarget} onHighlight={handleHighlight} />
 
                     {/* Charts */}
-                    <Charts records={filteredRecords} config={config} billableTags={billableTags} billableTarget={billableTarget} />
+                    <Charts records={filteredRecords} config={config} billableTags={billableTags} billableTarget={billableTarget} onHighlight={handleHighlight} />
 
                     {/* Heatmap */}
-                    <Heatmap records={filteredRecords} billableTags={billableTags} />
+                    <Heatmap records={filteredRecords} billableTags={billableTags} onHighlight={handleHighlight} />
 
                     {/* Entries Table */}
-                    <EntriesTable records={filteredRecords} onTagClick={handleTagClick} />
+                    <EntriesTable
+                        records={filteredRecords}
+                        onTagClick={handleTagClick}
+                        highlight={highlight}
+                        onClearHighlight={clearHighlight}
+                        onApplyHighlightFilter={applyHighlightAsFilter}
+                    />
                 </div>
             ) : (
                 <div className="empty-state">

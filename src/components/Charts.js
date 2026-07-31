@@ -41,6 +41,25 @@ const TAG_COLORS = [
     '#a855f7', '#22d3ee', '#84cc16', '#e11d48', '#0ea5e9',
 ];
 
+// Maps a chart period key to the inclusive date range it represents.
+function periodToRange(key, mode) {
+    if (!key) return null;
+    if (mode === 'monthly') {
+        const [y, m] = key.split('-').map(Number);
+        const end = new Date(y, m, 0);
+        const pad = (n) => String(n).padStart(2, '0');
+        return { from: `${key}-01`, to: `${key}-${pad(end.getDate())}`, label: key };
+    }
+    if (mode === 'weekly') {
+        const start = new Date(key + 'T00:00:00');
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        return { from: key, to: fmt(end), label: `week of ${key}` };
+    }
+    return { from: key, to: key, label: key };
+}
+
 const chartDefaults = {
     responsive: true,
     maintainAspectRatio: false,
@@ -76,7 +95,7 @@ const chartDefaults = {
     },
 };
 
-export default function Charts({ records, config, billableTags = [], billableTarget = 0 }) {
+export default function Charts({ records, config, billableTags = [], billableTarget = 0, onHighlight }) {
     const [timeMode, setTimeMode] = useState('daily');
     const [showTags, setShowTags] = useState(false);
     const [showBillable, setShowBillable] = useState(false);
@@ -183,6 +202,13 @@ export default function Charts({ records, config, billableTags = [], billableTar
     const billableActive = showBillable && billableTags.length > 0;
     const stacked = showTags || billableActive;
 
+    // Period key per bar index, used to map a bar click back to a date range
+    const periodKeys = billableActive && billableChartData
+        ? billableTimeData.map(d => d.key)
+        : showTags && stackedChartData
+            ? timeTagData.map(d => d.key)
+            : timeData.map(d => d[labelKey]);
+
     const barChartData = billableActive && billableChartData ? billableChartData
         : showTags && stackedChartData ? stackedChartData : {
             labels: timeData.map(d => {
@@ -206,6 +232,12 @@ export default function Charts({ records, config, billableTags = [], billableTar
 
     const barChartOptions = {
         ...chartDefaults,
+        onClick: (evt, elements) => {
+            if (!onHighlight || !elements || elements.length === 0) return;
+            const key = periodKeys[elements[0].index];
+            const range = periodToRange(key, timeMode);
+            if (range) onHighlight({ kind: 'dateRange', from: range.from, to: range.to, label: range.label });
+        },
         plugins: {
             ...chartDefaults.plugins,
             legend: {
@@ -468,13 +500,18 @@ export default function Charts({ records, config, billableTags = [], billableTar
                 <div className="chart-header">
                     <h3 className="chart-title">Tag Distribution</h3>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        hover for sub-tags
+                        hover for sub-tags · click to highlight
                     </span>
                 </div>
                 <div className="chart-container">
                     <Doughnut data={doughnutData} options={{
                         responsive: true,
                         maintainAspectRatio: false,
+                        onClick: (evt, elements) => {
+                            if (!onHighlight || !elements || elements.length === 0) return;
+                            const group = groupedTagData[elements[0].index];
+                            if (group) onHighlight({ kind: 'tag', value: group.tag, label: '#' + group.tag });
+                        },
                         plugins: {
                             legend: {
                                 display: true,

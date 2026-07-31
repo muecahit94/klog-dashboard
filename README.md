@@ -14,7 +14,8 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 - **🔍 Free-Text Search** – Search across all summaries, dates, and file names.
 - **📊 Interactive Charts** – Daily/weekly/monthly bar chart (stack by tag or by **billable/non-billable**), tag distribution doughnut, trend line.
 - **🗓️ Activity Heatmap** – GitHub-style contribution heatmap.
-- **📋 Entries Table** – Sortable, paginated table of all entries with clickable tags.
+- **📋 Entries Table** – Sortable, paginated table of all entries with clickable tags and expandable row details.
+- **🖱️ Click-to-Drill-Down** – Click a chart bar, doughnut slice, heatmap day or billable segment to highlight the matching entries (and optionally filter to them).
 - **📈 Tag Breakdown** – Visual bar chart of time per tag.
 - **💰 Billable vs Non-billable** – Split of billable vs non-billable time, colored per tag, with an optional billable-percentage goal.
 - **�📥 Export** – Export filtered data as CSV or JSON.

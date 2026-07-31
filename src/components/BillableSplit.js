@@ -15,7 +15,7 @@ const TAG_COLORS = [
 
 const NON_BILLABLE_COLOR = 'var(--text-muted)';
 
-export default function BillableSplit({ records, billableTags = [], billableTarget = 0 }) {
+export default function BillableSplit({ records, billableTags = [], billableTarget = 0, onHighlight }) {
     const stats = useMemo(
         () => aggregateBillable(records, billableTags),
         [records, billableTags],
@@ -103,10 +103,12 @@ export default function BillableSplit({ records, billableTags = [], billableTarg
                     {tagSegments.map(seg => seg.pctOfTotal > 0 && (
                         <div
                             key={seg.key}
-                            title={`${seg.label}: ${formatMinutes(seg.minutes)} · ${seg.pctOfBillable.toFixed(1)}% of billable`}
+                            title={`${seg.label}: ${formatMinutes(seg.minutes)} · ${seg.pctOfBillable.toFixed(1)}% of billable — click to highlight`}
+                            onClick={() => onHighlight?.({ kind: 'tag', value: seg.key, label: seg.label })}
                             style={{
                                 width: `${seg.pctOfTotal}%`,
                                 background: seg.color,
+                                cursor: onHighlight ? 'pointer' : 'default',
                                 transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                             }}
                         />
@@ -149,7 +151,12 @@ export default function BillableSplit({ records, billableTags = [], billableTarg
                 alignItems: 'center',
             }}>
                 {tagSegments.map(seg => (
-                    <span key={seg.key} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px' }}>
+                    <span
+                        key={seg.key}
+                        onClick={() => onHighlight?.({ kind: 'tag', value: seg.key, label: seg.label })}
+                        title={`Highlight ${seg.label} entries`}
+                        style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', cursor: onHighlight ? 'pointer' : 'default' }}
+                    >
                         <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: seg.color, flexShrink: 0 }} />
                         <span style={{ color: 'var(--text-primary)' }}>{seg.label}</span>
                         <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
