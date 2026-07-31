@@ -20,6 +20,7 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 - **�📥 Export** – Export filtered data as CSV or JSON.
 - **⚡ Keyboard Shortcuts** – `⌘O` to import, `Esc` to clear filters.
 - **✨ Demo Data** – Built-in sample data to explore the dashboard immediately.
+- **⚠️ Parse Diagnostics** – Lines that can't be parsed are surfaced with their file and line number instead of being silently dropped.
 
 ## 🚀 Quick Start
 

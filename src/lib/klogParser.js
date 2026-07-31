@@ -11,29 +11,46 @@
  * @returns {Array<Record>} Array of parsed records
  */
 export function parseKlog(content, fileName = '') {
+    return parseKlogInto(content, fileName, []);
+}
+
+/**
+ * Parse a klog file and also return diagnostics for lines that could not be parsed.
+ * @param {string} content
+ * @param {string} [fileName]
+ * @returns {{records: Array<Record>, warnings: Array<{file: string, line: number, message: string, text: string}>}}
+ */
+export function parseKlogWithDiagnostics(content, fileName = '') {
+    const warnings = [];
+    const records = parseKlogInto(content, fileName, warnings);
+    return { records, warnings };
+}
+
+function parseKlogInto(content, fileName, warnings) {
     if (!content || !content.trim()) return [];
 
     const lines = content.replace(/\r\n/g, '\n').split('\n');
     const records = [];
     let currentBlock = [];
+    let blockStartLine = 0;
 
-    for (const line of lines) {
+    const flush = () => {
+        if (currentBlock.length === 0) return;
+        const record = parseRecord(currentBlock, fileName, blockStartLine, warnings);
+        if (record) records.push(record);
+        currentBlock = [];
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         if (line.trim() === '') {
-            if (currentBlock.length > 0) {
-                const record = parseRecord(currentBlock, fileName);
-                if (record) records.push(record);
-                currentBlock = [];
-            }
+            flush();
         } else {
+            if (currentBlock.length === 0) blockStartLine = i + 1; // 1-based line number
             currentBlock.push(line);
         }
     }
-
-    // Don't forget the last block
-    if (currentBlock.length > 0) {
-        const record = parseRecord(currentBlock, fileName);
-        if (record) records.push(record);
-    }
+    flush();
 
     return records;
 }
@@ -44,14 +61,24 @@ export function parseKlog(content, fileName = '') {
  * @returns {Array<Record>}
  */
 export function parseMultipleKlogFiles(files) {
+    return parseMultipleKlogFilesWithDiagnostics(files).records;
+}
+
+/**
+ * Parse multiple klog files and return records plus parse diagnostics.
+ * @param {Array<{name: string, content: string}>} files
+ * @returns {{records: Array<Record>, warnings: Array<{file: string, line: number, message: string, text: string}>}}
+ */
+export function parseMultipleKlogFilesWithDiagnostics(files) {
     const allRecords = [];
+    const warnings = [];
     for (const file of files) {
-        const records = parseKlog(file.content, file.name);
+        const records = parseKlogInto(file.content, file.name, warnings);
         allRecords.push(...records);
     }
     // Sort by date
     allRecords.sort((a, b) => a.date.localeCompare(b.date));
-    return allRecords;
+    return { records: allRecords, warnings };
 }
 
 // --- Internal Parsing Functions ---
@@ -70,12 +97,22 @@ function isDoubleIndented(line) {
     return /^(\t\t|    {2}|  {4})/.test(line);
 }
 
-function parseRecord(blockLines, fileName) {
+function parseRecord(blockLines, fileName, startLine = 0, warnings = null) {
     if (blockLines.length === 0) return null;
 
     const firstLine = blockLines[0];
     const dateMatch = firstLine.match(DATE_REGEX);
-    if (!dateMatch) return null;
+    if (!dateMatch) {
+        if (warnings) {
+            warnings.push({
+                file: fileName || '',
+                line: startLine,
+                message: 'Expected a date at the start of the block',
+                text: firstLine.trim(),
+            });
+        }
+        return null;
+    }
 
     const dateStr = dateMatch[1].replace(/\//g, '-');
 
@@ -100,7 +137,8 @@ function parseRecord(blockLines, fileName) {
     // Remaining lines are entries (indented) or entry summaries (double-indented)
     while (i < blockLines.length) {
         if (isIndented(blockLines[i]) && !isDoubleIndented(blockLines[i])) {
-            // Start of a new entry
+            // Start of a new entry; remember its 1-based line number for diagnostics
+            const entryStartIdx = i;
             const entryGroup = [blockLines[i].trim()];
             i++;
             // Collect continuation lines (double-indented or same-level summaries)
@@ -108,7 +146,7 @@ function parseRecord(blockLines, fileName) {
                 entryGroup.push(blockLines[i].trim());
                 i++;
             }
-            entryLines.push(entryGroup);
+            entryLines.push({ group: entryGroup, line: startLine + entryStartIdx, raw: blockLines[entryStartIdx] });
         } else {
             i++;
         }
@@ -119,12 +157,19 @@ function parseRecord(blockLines, fileName) {
 
     // Parse entries
     const entries = [];
-    for (const entryGroup of entryLines) {
-        const entry = parseEntry(entryGroup);
+    for (const item of entryLines) {
+        const entry = parseEntry(item.group);
         if (entry) {
             // Merge record-level tags into entry
             entry.allTags = [...new Set([...recordTags, ...entry.tags])];
             entries.push(entry);
+        } else if (warnings) {
+            warnings.push({
+                file: fileName || '',
+                line: item.line,
+                message: 'Could not parse entry',
+                text: item.raw.trim(),
+            });
         }
     }
 

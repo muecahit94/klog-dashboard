@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { parseKlog, parseMultipleKlogFiles, getDemoData } from '@/lib/klogParser';
+import { parseKlogWithDiagnostics, parseMultipleKlogFilesWithDiagnostics, getDemoData } from '@/lib/klogParser';
 
 export default function FileImport({ onImport, hasData }) {
     const [isDragOver, setIsDragOver] = useState(false);
     const [importStatus, setImportStatus] = useState(null);
+    const [parseWarnings, setParseWarnings] = useState([]);
     const fileInputRef = useRef(null);
 
     // State for tracking last modified times of auto-imported files
@@ -61,7 +62,8 @@ export default function FileImport({ onImport, hasData }) {
                     }
 
                     if (loadedFiles.length > 0) {
-                        const records = parseMultipleKlogFiles(loadedFiles);
+                        const { records, warnings } = parseMultipleKlogFilesWithDiagnostics(loadedFiles);
+                        setParseWarnings(warnings);
                         onImport(records, { replaceFiles: loadedFiles.map(f => f.name) });
 
                         setImportStatus({
@@ -108,7 +110,8 @@ export default function FileImport({ onImport, hasData }) {
             return;
         }
 
-        const records = parseMultipleKlogFiles(files);
+        const { records, warnings } = parseMultipleKlogFilesWithDiagnostics(files);
+        setParseWarnings(warnings);
 
         setImportStatus({
             type: 'success',
@@ -165,7 +168,8 @@ export default function FileImport({ onImport, hasData }) {
 
     const handleDemoData = useCallback(() => {
         const content = getDemoData();
-        const records = parseKlog(content, 'demo.klg');
+        const { records } = parseKlogWithDiagnostics(content, 'demo.klg');
+        setParseWarnings([]);
         setImportStatus({
             type: 'success',
             message: `Loaded ${records.length} demo records`,
@@ -195,6 +199,7 @@ export default function FileImport({ onImport, hasData }) {
                         + Add Files
                     </button>
                 </div>
+                <ParseWarnings warnings={parseWarnings} onDismiss={() => setParseWarnings([])} />
                 <input
                     ref={fileInputRef}
                     type="file"
@@ -238,6 +243,7 @@ export default function FileImport({ onImport, hasData }) {
                     </div>
                 )}
             </div>
+            <ParseWarnings warnings={parseWarnings} onDismiss={() => setParseWarnings([])} />
             <input
                 ref={fileInputRef}
                 type="file"
@@ -276,4 +282,42 @@ async function readEntry(entry) {
         });
     }
     return [];
+}
+
+function ParseWarnings({ warnings, onDismiss }) {
+    if (!warnings || warnings.length === 0) return null;
+    const shown = warnings.slice(0, 50);
+    return (
+        <div
+            className="animate-fade-in"
+            style={{
+                marginTop: '10px',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--accent-warning)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ color: 'var(--accent-warning)', fontWeight: 600, fontSize: '13px' }}>
+                    ⚠ {warnings.length} line{warnings.length > 1 ? 's' : ''} could not be parsed
+                </span>
+                <button className="btn btn-secondary btn-sm" onClick={onDismiss}>Dismiss</button>
+            </div>
+            <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', maxHeight: '150px', overflowY: 'auto' }}>
+                {shown.map((w, i) => (
+                    <li key={i} style={{ fontSize: '12px', padding: '2px 0', fontFamily: 'monospace' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>{w.file ? `${w.file}:` : ''}{w.line}</span>{' '}
+                        <span style={{ color: 'var(--text-secondary)' }}>{w.message} —</span>{' '}
+                        <span style={{ color: 'var(--text-primary)' }}>{w.text || '(empty line)'}</span>
+                    </li>
+                ))}
+                {warnings.length > shown.length && (
+                    <li style={{ fontSize: '12px', color: 'var(--text-muted)', paddingTop: '4px' }}>
+                        …and {warnings.length - shown.length} more
+                    </li>
+                )}
+            </ul>
+        </div>
+    );
 }

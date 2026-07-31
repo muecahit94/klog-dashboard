@@ -59,8 +59,9 @@ graph TD
 - It handles standard klog format. If adding support for new klog features, update the regex and `record` object structure.
 
 ### CI/CD
-- GitHub Actions workflow is in `.github/workflows/release-please-docker-build.yml`.
-- `release-please` opens/merges release PRs; on release it builds the multi-arch Docker image and pushes to GHCR.
+- Lint + build run on every pull request and non-`main` push via `.github/workflows/ci.yml`.
+- Release automation is in `.github/workflows/release-please-docker-build.yml`.
+- `release-please` opens/merges release PRs; on release it builds the multi-arch Docker image (native amd64 + arm64 runners, merged into one manifest) and pushes to GHCR.
 
 ## 📝 Conventions
 - **Styling**: Vanilla CSS in `src/app/globals.css`. Use CSS variables for colors (Theme variables at top of file).
