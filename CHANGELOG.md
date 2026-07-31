@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.0](https://github.com/muecahit94/klog-dashboard/compare/v1.8.1...v1.9.0) (2026-07-31)
+
+
+### Features
+
+* add CI workflow and enhance klog parsing with diagnostics ([c8588fd](https://github.com/muecahit94/klog-dashboard/commit/c8588fd4bfdb021f2256463be008c8e875278f0c))
+* implement cross-dashboard drill-down highlighting for entries ([39fe843](https://github.com/muecahit94/klog-dashboard/commit/39fe84307501095ac787612e0ee5a3e983720b25))
+
 ## [1.8.1](https://github.com/muecahit94/klog-dashboard/compare/v1.8.0...v1.8.1) (2026-07-30)
 
 
