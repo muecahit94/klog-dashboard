@@ -9,7 +9,7 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 - **📂 File Import** – Drag & drop files, supports `.klg`, `.klog`, and `.txt`.
 - **🔄 Realtime Folder Watch** – Point to a local folder via `KLOG_DATA_DIR` and see changes automatically.
 - **📅 Date Range Filter** – Focus on specific time periods.
-- **⚡ Quick Date Presets** – One-click Today, This Week, This Month, Last Month, Last 7/30 Days, This Year, and All Time.
+- **⚡ Quick Date Presets** – One-click Today, This Week, This Month, Last Month, This Quarter, This Half Year, This Year, and All Time.
 - **🏷️ Tag Filter** – Multi-select tags to drill into projects.
 - **🔍 Free-Text Search** – Search across all summaries, dates, and file names.
 - **📊 Interactive Charts** – Daily/weekly/monthly bar chart (stack by tag or by **billable/non-billable**), tag distribution doughnut, trend line.

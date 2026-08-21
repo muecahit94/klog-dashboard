@@ -89,13 +89,16 @@ export default function FilterBar({ filters, onFilterChange, allTags }) {
         const weekStart = at(y, m, d - dow);
         const weekEnd = at(y, m, d - dow + 6);
 
+        const qStartMonth = Math.floor(m / 3) * 3;
+        const hStartMonth = Math.floor(m / 6) * 6;
+
         return [
             { label: 'Today', from: at(y, m, d), to: at(y, m, d) },
             { label: 'This Week', from: weekStart, to: weekEnd },
-            { label: 'Last 7 Days', from: at(y, m, d - 6), to: at(y, m, d) },
             { label: 'This Month', from: at(y, m, 1), to: at(y, m + 1, 0) },
             { label: 'Last Month', from: at(y, m - 1, 1), to: at(y, m, 0) },
-            { label: 'Last 30 Days', from: at(y, m, d - 29), to: at(y, m, d) },
+            { label: 'This Quarter', from: at(y, qStartMonth, 1), to: at(y, qStartMonth + 3, 0) },
+            { label: 'This Half Year', from: at(y, hStartMonth, 1), to: at(y, hStartMonth + 6, 0) },
             { label: 'This Year', from: at(y, 0, 1), to: at(y, 11, 31) },
             { label: 'All Time', from: null, to: null },
         ];
