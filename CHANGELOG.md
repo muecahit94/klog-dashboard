@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/muecahit94/klog-dashboard/compare/v1.9.0...v1.9.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* update date presets to include This Quarter and This Half Year while removing rolling day ranges ([0520996](https://github.com/muecahit94/klog-dashboard/commit/0520996d27626b74dbbd9fdb18d46d4bfbaee8b0))
+
 ## [1.9.0](https://github.com/muecahit94/klog-dashboard/compare/v1.8.1...v1.9.0) (2026-07-31)
 
 
