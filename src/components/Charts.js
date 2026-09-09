@@ -95,6 +95,122 @@ const chartDefaults = {
     },
 };
 
+function formatDecimalHours(val) {
+    if (val == null || val <= 0 || isNaN(val)) return '';
+    const rounded = Math.round(val * 100) / 100;
+    if (rounded <= 0) return '';
+    return `${rounded}h`;
+}
+
+const barValueLabelsPlugin = {
+    id: 'barValueLabels',
+    afterDatasetsDraw(chart) {
+        const { ctx, data } = chart;
+        const columnCount = data.labels?.length || 0;
+        if (columnCount > 30) return;
+
+        const isStacked = chart.options?.scales?.x?.stacked;
+        const datasets = data.datasets || [];
+        if (datasets.length === 0) return;
+
+        ctx.save();
+
+        if (!isStacked) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || meta.hidden) {
+                ctx.restore();
+                return;
+            }
+
+            const dataList = datasets[0]?.data || [];
+            meta.data.forEach((element, i) => {
+                const val = dataList[i];
+                if (!val || val <= 0 || isNaN(val) || !element) return;
+                const text = formatDecimalHours(val);
+                if (!text) return;
+
+                const { x: barX, y: barY, width: barWidth } = element;
+                if (typeof barX !== 'number' || typeof barY !== 'number') return;
+
+                const fontSize = barWidth < 18 ? (barWidth < 13 ? 9 : 10) : 11;
+                ctx.font = `600 ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillStyle = '#e0e7ff';
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+                ctx.shadowBlur = 3;
+                ctx.fillText(text, barX, barY - 4);
+            });
+        } else {
+            const numPoints = datasets[0]?.data?.length || 0;
+
+            for (let i = 0; i < numPoints; i++) {
+                let columnTotal = 0;
+                let topY = Infinity;
+                let barX = 0;
+                let barWidth = 0;
+                const visibleSegments = [];
+
+                datasets.forEach((ds, dsIdx) => {
+                    const meta = chart.getDatasetMeta(dsIdx);
+                    if (meta?.hidden) return;
+                    const val = ds.data[i] || 0;
+                    if (val > 0) {
+                        columnTotal += val;
+                        const el = meta.data[i];
+                        if (el) {
+                            barX = el.x;
+                            barWidth = el.width;
+                            if (el.y < topY) topY = el.y;
+                            visibleSegments.push({ val, el });
+                        }
+                    }
+                });
+
+                // Render segment hours inside segments if tall enough
+                if (visibleSegments.length > 1) {
+                    visibleSegments.forEach(({ val, el }) => {
+                        const segHeight = Math.abs(el.base - el.y);
+                        const segText = formatDecimalHours(val);
+                        ctx.font = '600 10px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                        const textWidth = ctx.measureText(segText).width;
+
+                        if (segHeight >= 18 && barWidth >= textWidth + 4) {
+                            ctx.save();
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillStyle = '#ffffff';
+                            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                            ctx.shadowBlur = 3;
+                            ctx.fillText(segText, el.x, (el.y + el.base) / 2);
+                            ctx.restore();
+                        }
+                    });
+                }
+
+                // Render column total on top of the column
+                if (columnTotal > 0 && topY !== Infinity) {
+                    const totalText = formatDecimalHours(columnTotal);
+                    const fontSize = barWidth < 18 ? (barWidth < 13 ? 9 : 10) : 11;
+                    ctx.save();
+                    ctx.font = `600 ${fontSize}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillStyle = '#f0f1f5';
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+                    ctx.shadowBlur = 3;
+                    ctx.fillText(totalText, barX, topY - 4);
+                    ctx.restore();
+                }
+            }
+        }
+
+        ctx.restore();
+    },
+};
+
+const barPlugins = [barValueLabelsPlugin];
+
 export default function Charts({ records, config, billableTags = [], billableTarget = 0, onHighlight }) {
     const [timeMode, setTimeMode] = useState('daily');
     const [showTags, setShowTags] = useState(false);
@@ -302,6 +418,7 @@ export default function Charts({ records, config, billableTags = [], billableTar
             y: {
                 ...chartDefaults.scales.y,
                 stacked,
+                grace: '10%',
             },
         },
     };
@@ -443,55 +560,55 @@ export default function Charts({ records, config, billableTags = [], billableTar
                             Tags
                         </label>
                         {billableTags.length > 0 && (
-                        <label
-                            onClick={() => setShowBillable(v => {
-                                const next = !v;
-                                if (next) setShowTags(false);
-                                return next;
-                            })}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                fontSize: '12px',
-                                color: showBillable ? '#f0f1f5' : 'var(--text-muted)',
-                                cursor: 'pointer',
-                                marginLeft: '10px',
-                                userSelect: 'none',
-                                transition: 'color 0.2s',
-                            }}
-                        >
-                            <span style={{
-                                position: 'relative',
-                                width: '32px',
-                                height: '18px',
-                                borderRadius: '9px',
-                                background: showBillable
-                                    ? 'linear-gradient(135deg, #10b981, #06b6d4)'
-                                    : 'rgba(255, 255, 255, 0.1)',
-                                transition: 'background 0.25s ease',
-                                boxShadow: showBillable ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
-                                flexShrink: 0,
-                            }}>
+                            <label
+                                onClick={() => setShowBillable(v => {
+                                    const next = !v;
+                                    if (next) setShowTags(false);
+                                    return next;
+                                })}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    fontSize: '12px',
+                                    color: showBillable ? '#f0f1f5' : 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    marginLeft: '10px',
+                                    userSelect: 'none',
+                                    transition: 'color 0.2s',
+                                }}
+                            >
                                 <span style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    left: showBillable ? '16px' : '2px',
-                                    width: '14px',
-                                    height: '14px',
-                                    borderRadius: '50%',
-                                    background: '#fff',
-                                    transition: 'left 0.25s ease',
-                                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                                }} />
-                            </span>
-                            Billable
-                        </label>
+                                    position: 'relative',
+                                    width: '32px',
+                                    height: '18px',
+                                    borderRadius: '9px',
+                                    background: showBillable
+                                        ? 'linear-gradient(135deg, #10b981, #06b6d4)'
+                                        : 'rgba(255, 255, 255, 0.1)',
+                                    transition: 'background 0.25s ease',
+                                    boxShadow: showBillable ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
+                                    flexShrink: 0,
+                                }}>
+                                    <span style={{
+                                        position: 'absolute',
+                                        top: '2px',
+                                        left: showBillable ? '16px' : '2px',
+                                        width: '14px',
+                                        height: '14px',
+                                        borderRadius: '50%',
+                                        background: '#fff',
+                                        transition: 'left 0.25s ease',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                    }} />
+                                </span>
+                                Billable
+                            </label>
                         )}
                     </div>
                 </div>
                 <div className="chart-container">
-                    <Bar data={barChartData} options={barChartOptions} />
+                    <Bar data={barChartData} options={barChartOptions} plugins={barPlugins} />
                 </div>
             </div>
 
@@ -657,61 +774,61 @@ export default function Charts({ records, config, billableTags = [], billableTar
                         const totalHours = groupedTagData.reduce((sum, g) => sum + g.hours, 0);
                         const maxHours = groupedTagData[0]?.hours || 1;
                         return groupedTagData.slice(0, 15).map((group, i) => {
-                        const pct = (group.hours / maxHours) * 100;
-                        const sharePct = totalHours > 0 ? (group.hours / totalHours) * 100 : 0;
-                        const color = TAG_COLORS[i % TAG_COLORS.length];
-                        const hasChildren = group.children.some(c => c.tag !== '(direct)');
-                        return (
-                            <div key={group.tag} className="tag-breakdown-group">
-                                <div className="tag-breakdown-item">
-                                    <span className="tag-breakdown-name">#{group.tag}</span>
-                                    <div className="tag-breakdown-bar">
-                                        <div
-                                            className="tag-breakdown-fill"
-                                            style={{ width: `${pct}%`, background: color }}
-                                        />
-                                    </div>
-                                    <span className="tag-breakdown-value">
-                                        {group.hours.toFixed(2)}h ({sharePct.toFixed(0)}%)
-                                    </span>
-                                </div>
-                                {hasChildren && group.children.map((child) => {
-                                    const childPct = group.hours > 0 ? (child.hours / group.hours) * 100 : 0;
-                                    const label = child.tag === '(direct)' ? 'direct (no sub-tag)' : '#' + child.tag;
-                                    return (
-                                        <div
-                                            key={group.tag + '::' + child.tag}
-                                            className="tag-breakdown-item"
-                                            style={{ paddingLeft: '20px', opacity: 0.85 }}
-                                        >
-                                            <span
-                                                className="tag-breakdown-name"
-                                                style={{ fontSize: '12px', color: 'var(--text-muted)' }}
-                                            >
-                                                <span style={{ marginRight: '4px' }}>↳</span>{label}
-                                            </span>
-                                            <div className="tag-breakdown-bar">
-                                                <div
-                                                    className="tag-breakdown-fill"
-                                                    style={{
-                                                        width: `${childPct}%`,
-                                                        background: color,
-                                                        opacity: 0.55,
-                                                    }}
-                                                />
-                                            </div>
-                                            <span
-                                                className="tag-breakdown-value"
-                                                style={{ fontSize: '12px' }}
-                                            >
-                                                {child.hours.toFixed(2)}h ({childPct.toFixed(0)}%)
-                                            </span>
+                            const pct = (group.hours / maxHours) * 100;
+                            const sharePct = totalHours > 0 ? (group.hours / totalHours) * 100 : 0;
+                            const color = TAG_COLORS[i % TAG_COLORS.length];
+                            const hasChildren = group.children.some(c => c.tag !== '(direct)');
+                            return (
+                                <div key={group.tag} className="tag-breakdown-group">
+                                    <div className="tag-breakdown-item">
+                                        <span className="tag-breakdown-name">#{group.tag}</span>
+                                        <div className="tag-breakdown-bar">
+                                            <div
+                                                className="tag-breakdown-fill"
+                                                style={{ width: `${pct}%`, background: color }}
+                                            />
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        );
-                    });
+                                        <span className="tag-breakdown-value">
+                                            {group.hours.toFixed(2)}h ({sharePct.toFixed(0)}%)
+                                        </span>
+                                    </div>
+                                    {hasChildren && group.children.map((child) => {
+                                        const childPct = group.hours > 0 ? (child.hours / group.hours) * 100 : 0;
+                                        const label = child.tag === '(direct)' ? 'direct (no sub-tag)' : '#' + child.tag;
+                                        return (
+                                            <div
+                                                key={group.tag + '::' + child.tag}
+                                                className="tag-breakdown-item"
+                                                style={{ paddingLeft: '20px', opacity: 0.85 }}
+                                            >
+                                                <span
+                                                    className="tag-breakdown-name"
+                                                    style={{ fontSize: '12px', color: 'var(--text-muted)' }}
+                                                >
+                                                    <span style={{ marginRight: '4px' }}>↳</span>{label}
+                                                </span>
+                                                <div className="tag-breakdown-bar">
+                                                    <div
+                                                        className="tag-breakdown-fill"
+                                                        style={{
+                                                            width: `${childPct}%`,
+                                                            background: color,
+                                                            opacity: 0.55,
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span
+                                                    className="tag-breakdown-value"
+                                                    style={{ fontSize: '12px' }}
+                                                >
+                                                    {child.hours.toFixed(2)}h ({childPct.toFixed(0)}%)
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        });
                     })()}
                 </div>
             </div>
