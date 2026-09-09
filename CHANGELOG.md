@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.2](https://github.com/muecahit94/klog-dashboard/compare/v1.9.1...v1.9.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* add custom Chart.js plugin to display the time over the bar ([76f3695](https://github.com/muecahit94/klog-dashboard/commit/76f3695bfd32c4290fa108fc007c78332cd119cc))
+
 ## [1.9.1](https://github.com/muecahit94/klog-dashboard/compare/v1.9.0...v1.9.1) (2026-08-21)
 
 
