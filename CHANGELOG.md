@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/muecahit94/klog-dashboard/compare/v1.9.2...v1.10.0) (2026-11-02)
+
+
+### Features
+
+* support toggleable excluded tags and visual breakdown in charts and tables ([7f57751](https://github.com/muecahit94/klog-dashboard/commit/7f577519e3966df84b6296eb73437695646b4bee))
+
 ## [1.9.2](https://github.com/muecahit94/klog-dashboard/compare/v1.9.1...v1.9.2) (2026-09-09)
 
 
