@@ -36,10 +36,20 @@ ChartJS.register(
 );
 
 const TAG_COLORS = [
-    '#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b',
-    '#ef4444', '#ec4899', '#3b82f6', '#14b8a6', '#f97316',
-    '#a855f7', '#22d3ee', '#84cc16', '#e11d48', '#0ea5e9',
+    '#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#3b82f6',
+    '#a855f7', '#ec4899', '#14b8a6', '#22d3ee', '#84cc16',
+    '#0ea5e9', '#818cf8', '#38bdf8', '#2dd4bf', '#a78bfa',
 ];
+
+const EXCLUDED_TAG_COLORS = [
+    '#f59e0b', '#f97316', '#fbbf24', '#ea580c', '#d97706', '#fdba74',
+];
+
+function isTagExcluded(tag, excludedList = []) {
+    if (!excludedList || excludedList.length === 0 || !tag) return false;
+    const clean = String(tag).replace(/^#/, '').toLowerCase();
+    return excludedList.some(et => String(et).replace(/^#/, '').toLowerCase() === clean);
+}
 
 // Maps a chart period key to the inclusive date range it represents.
 function periodToRange(key, mode) {
@@ -211,7 +221,16 @@ const barValueLabelsPlugin = {
 
 const barPlugins = [barValueLabelsPlugin];
 
-export default function Charts({ records, config, billableTags = [], billableTarget = 0, onHighlight }) {
+export default function Charts({
+    records,
+    excludedRecords = [],
+    config,
+    billableTags = [],
+    billableTarget = 0,
+    excludedTags = [],
+    showExcluded = false,
+    onHighlight,
+}) {
     const [timeMode, setTimeMode] = useState('daily');
     const [showTags, setShowTags] = useState(false);
     const [showBillable, setShowBillable] = useState(false);
@@ -220,11 +239,37 @@ export default function Charts({ records, config, billableTags = [], billableTar
     const dailyData = useMemo(() => aggregateByDate(records), [records]);
     const weeklyData = useMemo(() => aggregateByWeek(records), [records]);
     const monthlyData = useMemo(() => aggregateByMonth(records), [records]);
-    const groupedTagData = useMemo(() => aggregateByTagGrouped(records), [records]);
+
+    const dailyExcludedData = useMemo(() => aggregateByDate(excludedRecords), [excludedRecords]);
+    const weeklyExcludedData = useMemo(() => aggregateByWeek(excludedRecords), [excludedRecords]);
+    const monthlyExcludedData = useMemo(() => aggregateByMonth(excludedRecords), [excludedRecords]);
 
     const dailyTagData = useMemo(() => aggregateByDateWithTags(records), [records]);
     const weeklyTagData = useMemo(() => aggregateByWeekWithTags(records), [records]);
     const monthlyTagData = useMemo(() => aggregateByMonthWithTags(records), [records]);
+
+    const dailyExcludedTagData = useMemo(
+        () => aggregateByDateWithTags(excludedRecords, excludedTags),
+        [excludedRecords, excludedTags],
+    );
+    const weeklyExcludedTagData = useMemo(
+        () => aggregateByWeekWithTags(excludedRecords, excludedTags),
+        [excludedRecords, excludedTags],
+    );
+    const monthlyExcludedTagData = useMemo(
+        () => aggregateByMonthWithTags(excludedRecords, excludedTags),
+        [excludedRecords, excludedTags],
+    );
+
+    const allRecordsForTags = useMemo(() => {
+        if (!showExcluded || excludedRecords.length === 0) return records;
+        return [...records, ...excludedRecords];
+    }, [records, excludedRecords, showExcluded]);
+
+    const groupedTagData = useMemo(
+        () => aggregateByTagGrouped(allRecordsForTags, showExcluded ? excludedTags : []),
+        [allRecordsForTags, showExcluded, excludedTags],
+    );
 
     const billableTimeData = useMemo(
         () => aggregateBillableByPeriod(records, billableTags, timeMode),
@@ -234,105 +279,222 @@ export default function Charts({ records, config, billableTags = [], billableTar
     const timeData = timeMode === 'daily' ? dailyData :
         timeMode === 'weekly' ? weeklyData : monthlyData;
 
+    const timeExcludedData = timeMode === 'daily' ? dailyExcludedData :
+        timeMode === 'weekly' ? weeklyExcludedData : monthlyExcludedData;
+
     const timeTagData = timeMode === 'daily' ? dailyTagData :
         timeMode === 'weekly' ? weeklyTagData : monthlyTagData;
+
+    const timeExcludedTagData = timeMode === 'daily' ? dailyExcludedTagData :
+        timeMode === 'weekly' ? weeklyExcludedTagData : monthlyExcludedTagData;
 
     const labelKey = timeMode === 'daily' ? 'date' :
         timeMode === 'weekly' ? 'week' : 'month';
 
     const targetHours = config?.dailyTargetHours || 8.0;
 
+    const hasExcluded = showExcluded && excludedRecords.length > 0;
+
+    const allPeriodKeys = useMemo(() => {
+        if (!hasExcluded) {
+            return timeData.map(d => d[labelKey]);
+        }
+        const set = new Set(timeData.map(d => d[labelKey]));
+        timeExcludedData.forEach(d => set.add(d[labelKey]));
+        return Array.from(set).sort();
+    }, [timeData, timeExcludedData, labelKey, hasExcluded]);
+
     // Build stacked datasets when showTags is true
     const stackedChartData = useMemo(() => {
-        if (!showTags || timeTagData.length === 0) return null;
+        if (!showTags) return null;
+        if (timeTagData.length === 0 && (!hasExcluded || timeExcludedTagData.length === 0)) return null;
 
-        // Collect all unique tags across all periods, sorted by total hours descending
+        const mergedByPeriod = new Map();
+        for (const p of timeTagData) {
+            mergedByPeriod.set(p.key, {
+                key: p.key,
+                tagBreakdown: { ...p.tagBreakdown },
+                subBreakdown: { ...p.subBreakdown },
+            });
+        }
+        if (hasExcluded && timeExcludedTagData.length > 0) {
+            for (const p of timeExcludedTagData) {
+                const existing = mergedByPeriod.get(p.key) || {
+                    key: p.key,
+                    tagBreakdown: {},
+                    subBreakdown: {},
+                };
+                for (const [t, mins] of Object.entries(p.tagBreakdown)) {
+                    existing.tagBreakdown[t] = (existing.tagBreakdown[t] || 0) + mins;
+                }
+                for (const [t, subs] of Object.entries(p.subBreakdown)) {
+                    if (!existing.subBreakdown[t]) existing.subBreakdown[t] = {};
+                    for (const [subT, subMins] of Object.entries(subs)) {
+                        existing.subBreakdown[t][subT] = (existing.subBreakdown[t][subT] || 0) + subMins;
+                    }
+                }
+                mergedByPeriod.set(p.key, existing);
+            }
+        }
+
+        const sortedKeys = Array.from(mergedByPeriod.keys()).sort();
+        const mergedList = sortedKeys.map(k => mergedByPeriod.get(k));
+
         const tagTotals = {};
-        for (const period of timeTagData) {
+        for (const period of mergedList) {
             for (const [tag, mins] of Object.entries(period.tagBreakdown)) {
                 if (!tagTotals[tag]) tagTotals[tag] = 0;
                 tagTotals[tag] += mins;
             }
         }
-        const sortedTags = Object.entries(tagTotals)
-            .sort(([, a], [, b]) => b - a)
-            .map(([tag]) => tag);
 
-        const labels = timeTagData.map(d => {
-            const val = d.key;
+        const regularTags = [];
+        const excludedTagList = [];
+        for (const [tag] of Object.entries(tagTotals).sort(([, a], [, b]) => b - a)) {
+            if (isTagExcluded(tag, excludedTags)) {
+                excludedTagList.push(tag);
+            } else {
+                regularTags.push(tag);
+            }
+        }
+        const allTagsSorted = [...regularTags, ...excludedTagList];
+
+        const labels = sortedKeys.map(val => {
             if (timeMode === 'daily' && val) return val.slice(5);
             if (timeMode === 'weekly' && val) return 'W ' + val.slice(5);
             return val;
         });
 
-        const datasets = sortedTags.map((tag, i) => ({
-            label: '#' + tag,
-            data: timeTagData.map(d => {
-                const mins = d.tagBreakdown[tag] || 0;
-                return minutesToDecimalHours(mins);
-            }),
-            backgroundColor: TAG_COLORS[i % TAG_COLORS.length] + 'cc',
-            borderColor: TAG_COLORS[i % TAG_COLORS.length],
-            borderWidth: 1,
-            borderRadius: 2,
-            _tag: tag,
-        }));
+        let regColorIdx = 0;
+        let exColorIdx = 0;
+        const datasets = allTagsSorted.map(tag => {
+            const isEx = isTagExcluded(tag, excludedTags);
+            let bg, border;
+            if (isEx) {
+                const col = EXCLUDED_TAG_COLORS[exColorIdx % EXCLUDED_TAG_COLORS.length];
+                exColorIdx++;
+                bg = col + 'dd';
+                border = col;
+            } else {
+                const col = TAG_COLORS[regColorIdx % TAG_COLORS.length];
+                regColorIdx++;
+                bg = col + 'cc';
+                border = col;
+            }
 
-        return { labels, datasets };
-    }, [showTags, timeTagData, timeMode]);
+            return {
+                label: '#' + tag + (isEx ? ' (excluded)' : ''),
+                data: mergedList.map(d => minutesToDecimalHours(d.tagBreakdown[tag] || 0)),
+                backgroundColor: bg,
+                borderColor: border,
+                borderWidth: 1,
+                borderRadius: 2,
+                _tag: tag,
+                _isExcluded: isEx,
+            };
+        });
+
+        return { labels, datasets, sortedKeys, mergedList };
+    }, [showTags, timeTagData, timeExcludedTagData, hasExcluded, timeMode, excludedTags]);
 
     // Billable vs non-billable stacked per period
     const billableChartData = useMemo(() => {
         if (!showBillable || billableTags.length === 0 || billableTimeData.length === 0) return null;
-        const labels = billableTimeData.map(d => {
-            const val = d.key;
+
+        const workedKeys = billableTimeData.map(d => d.key);
+        const billableMap = new Map(billableTimeData.map(d => [d.key, d.billableHours]));
+        const nonBillableMap = new Map(billableTimeData.map(d => [d.key, d.nonBillableHours]));
+        const excludedMap = new Map(timeExcludedData.map(d => [d[labelKey], d.hours]));
+
+        const keys = hasExcluded
+            ? Array.from(new Set([...workedKeys, ...timeExcludedData.map(d => d[labelKey])])).sort()
+            : workedKeys;
+
+        const labels = keys.map(val => {
             if (timeMode === 'daily' && val) return val.slice(5);
             if (timeMode === 'weekly' && val) return 'W ' + val.slice(5);
             return val;
         });
-        return {
-            labels,
-            datasets: [
-                {
-                    label: 'Billable',
-                    data: billableTimeData.map(d => d.billableHours),
-                    backgroundColor: 'rgba(16, 185, 129, 0.75)',
-                    borderColor: '#10b981',
-                    borderWidth: 1,
-                    borderRadius: 2,
-                    _billable: true,
-                },
-                {
-                    label: 'Non-billable',
-                    data: billableTimeData.map(d => d.nonBillableHours),
-                    backgroundColor: 'rgba(139, 143, 163, 0.45)',
-                    borderColor: '#8b8fa3',
-                    borderWidth: 1,
-                    borderRadius: 2,
-                    _billable: false,
-                },
-            ],
-        };
-    }, [showBillable, billableTags, billableTimeData, timeMode]);
+
+        const datasets = [
+            {
+                label: 'Billable',
+                data: keys.map(k => billableMap.get(k) || 0),
+                backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                borderColor: '#10b981',
+                borderWidth: 1,
+                borderRadius: 2,
+                _billable: true,
+            },
+            {
+                label: 'Non-billable',
+                data: keys.map(k => nonBillableMap.get(k) || 0),
+                backgroundColor: 'rgba(139, 143, 163, 0.45)',
+                borderColor: '#8b8fa3',
+                borderWidth: 1,
+                borderRadius: 2,
+                _billable: false,
+            },
+        ];
+
+        if (hasExcluded) {
+            datasets.push({
+                label: 'Excluded',
+                data: keys.map(k => excludedMap.get(k) || 0),
+                backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                borderColor: '#f59e0b',
+                borderWidth: 1,
+                borderRadius: 2,
+                _isExcluded: true,
+            });
+        }
+
+        return { labels, datasets, keys };
+    }, [showBillable, billableTags, billableTimeData, timeExcludedData, labelKey, timeMode, hasExcluded]);
 
     const billableActive = showBillable && billableTags.length > 0;
-    const stacked = showTags || billableActive;
+    const stacked = showTags || billableActive || hasExcluded;
 
-    // Period key per bar index, used to map a bar click back to a date range
-    const periodKeys = billableActive && billableChartData
-        ? billableTimeData.map(d => d.key)
-        : showTags && stackedChartData
-            ? timeTagData.map(d => d.key)
-            : timeData.map(d => d[labelKey]);
+    // Standard overview (worked vs excluded hours)
+    const standardChartData = useMemo(() => {
+        const workedMap = new Map(timeData.map(d => [d[labelKey], d.hours]));
+        const excludedMap = new Map(timeExcludedData.map(d => [d[labelKey], d.hours]));
 
-    const barChartData = billableActive && billableChartData ? billableChartData
-        : showTags && stackedChartData ? stackedChartData : {
-            labels: timeData.map(d => {
-                const val = d[labelKey];
-                if (timeMode === 'daily' && val) return val.slice(5); // MM-DD
-                if (timeMode === 'weekly' && val) return 'W ' + val.slice(5);
-                return val;
-            }),
+        const labels = allPeriodKeys.map(val => {
+            if (timeMode === 'daily' && val) return val.slice(5);
+            if (timeMode === 'weekly' && val) return 'W ' + val.slice(5);
+            return val;
+        });
+
+        if (hasExcluded) {
+            return {
+                labels,
+                datasets: [
+                    {
+                        label: 'Worked',
+                        data: allPeriodKeys.map(k => workedMap.get(k) || 0),
+                        backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        borderWidth: 1,
+                        borderRadius: 3,
+                        hoverBackgroundColor: 'rgba(99, 102, 241, 0.8)',
+                    },
+                    {
+                        label: 'Excluded',
+                        data: allPeriodKeys.map(k => excludedMap.get(k) || 0),
+                        backgroundColor: 'rgba(245, 158, 11, 0.75)',
+                        borderColor: '#f59e0b',
+                        borderWidth: 1,
+                        borderRadius: 3,
+                        hoverBackgroundColor: 'rgba(245, 158, 11, 0.9)',
+                        _isExcluded: true,
+                    },
+                ],
+            };
+        }
+
+        return {
+            labels,
             datasets: [{
                 label: 'Hours',
                 data: timeData.map(d => d.hours),
@@ -342,9 +504,22 @@ export default function Charts({ records, config, billableTags = [], billableTar
                 borderRadius: 4,
                 hoverBackgroundColor: 'rgba(99, 102, 241, 0.8)',
                 order: 2,
-            },
-            ],
+            }],
         };
+    }, [timeData, timeExcludedData, allPeriodKeys, labelKey, timeMode, hasExcluded]);
+
+    // Period key per bar index, used to map a bar click back to a date range
+    const periodKeys = billableActive && billableChartData
+        ? billableChartData.keys
+        : showTags && stackedChartData
+            ? stackedChartData.sortedKeys
+            : allPeriodKeys;
+
+    const barChartData = billableActive && billableChartData
+        ? billableChartData
+        : showTags && stackedChartData
+            ? stackedChartData
+            : standardChartData;
 
     const barChartOptions = {
         ...chartDefaults,
@@ -374,37 +549,65 @@ export default function Charts({ records, config, billableTags = [], billableTar
                 callbacks: {
                     label: (ctx) => {
                         const val = ctx.parsed.y;
+                        if (val === 0) return null;
                         if (billableActive) {
-                            if (val === 0) return null;
                             return ` ${ctx.dataset.label}: ${val.toFixed(2)}h`;
                         }
-                        if (showTags && val === 0) return null;
-                        return showTags ? ` ${ctx.dataset.label}: ${val.toFixed(2)}h` : `${val.toFixed(2)}h`;
+                        if (showTags) {
+                            return ` ${ctx.dataset.label}: ${val.toFixed(2)}h`;
+                        }
+                        if (hasExcluded) {
+                            return ` ${ctx.dataset.label}: ${val.toFixed(2)}h`;
+                        }
+                        return `${val.toFixed(2)}h`;
                     },
                     afterLabel: (ctx) => {
-                        if (!showTags) return undefined;
-                        if (ctx.parsed.y === 0) return undefined;
-                        const primary = ctx.dataset._tag;
-                        const period = timeTagData[ctx.dataIndex];
-                        const subs = period?.subBreakdown?.[primary];
-                        if (!subs) return undefined;
-                        const entries = Object.entries(subs).sort(([, a], [, b]) => b - a);
-                        if (entries.length === 0) return undefined;
-                        const parentMins = period.tagBreakdown[primary] || 0;
-                        return entries.map(([child, mins]) => {
-                            const hrs = minutesToDecimalHours(mins);
-                            const pct = parentMins > 0 ? ((mins / parentMins) * 100).toFixed(0) : 0;
-                            return `    › #${child}: ${hrs.toFixed(2)}h (${pct}%)`;
-                        });
+                        if (showTags) {
+                            if (ctx.parsed.y === 0) return undefined;
+                            const primary = ctx.dataset._tag;
+                            const period = stackedChartData?.mergedList?.[ctx.dataIndex];
+                            const subs = period?.subBreakdown?.[primary];
+                            if (!subs) return undefined;
+                            const entries = Object.entries(subs).sort(([, a], [, b]) => b - a);
+                            if (entries.length === 0) return undefined;
+                            const parentMins = period.tagBreakdown[primary] || 0;
+                            return entries.map(([child, mins]) => {
+                                const hrs = minutesToDecimalHours(mins);
+                                const pct = parentMins > 0 ? ((mins / parentMins) * 100).toFixed(0) : 0;
+                                return `    › #${child}: ${hrs.toFixed(2)}h (${pct}%)`;
+                            });
+                        }
+                        if (ctx.dataset._isExcluded && ctx.parsed.y > 0) {
+                            const key = periodKeys?.[ctx.dataIndex];
+                            const periodEx = timeExcludedTagData.find(d => d.key === key);
+                            if (periodEx && periodEx.tagBreakdown) {
+                                const entries = Object.entries(periodEx.tagBreakdown).sort(([, a], [, b]) => b - a);
+                                if (entries.length > 1) {
+                                    return entries.map(([t, mins]) => `    › #${t}: ${minutesToDecimalHours(mins).toFixed(2)}h`);
+                                }
+                            }
+                        }
+                        return undefined;
                     },
                     footer: (items) => {
-                        if (!billableActive || items.length === 0) return undefined;
-                        const d = billableTimeData[items[0].dataIndex];
-                        if (!d) return undefined;
-                        const total = d.billableMinutes + d.nonBillableMinutes;
-                        if (total <= 0) return undefined;
-                        const pct = ((d.billableMinutes / total) * 100).toFixed(1);
-                        return `Billable: ${pct}% of ${minutesToDecimalHours(total).toFixed(2)}h`;
+                        if (billableActive && items.length > 0) {
+                            // Only display billable percentage if there are tracked worked hours
+                            const hasWorked = items.some(it => !it.dataset._isExcluded && (it.parsed.y || 0) > 0);
+                            if (!hasWorked) return undefined;
+
+                            const key = periodKeys?.[items[0].dataIndex];
+                            const d = key ? billableTimeData.find(item => item.key === key) : null;
+                            if (!d) return undefined;
+                            const total = d.billableMinutes + d.nonBillableMinutes;
+                            if (total <= 0) return undefined;
+                            const pct = ((d.billableMinutes / total) * 100).toFixed(1);
+                            return `Billable: ${pct}% of ${minutesToDecimalHours(total).toFixed(2)}h`;
+                        }
+                        if (hasExcluded && items.length > 1) {
+                            const total = items.reduce((s, it) => s + (it.parsed.y || 0), 0);
+                            return `Total: ${total.toFixed(2)}h`;
+                        }
+                        return undefined;
                     },
                 },
             },
@@ -423,24 +626,74 @@ export default function Charts({ records, config, billableTags = [], billableTar
         },
     };
 
-    const trendChartData = {
-        labels: dailyData.map(d => d.date.slice(5)),
-        datasets: [{
-            label: 'Hours',
-            data: dailyData.map(d => d.hours),
-            borderColor: '#6366f1',
-            backgroundColor: 'rgba(99, 102, 241, 0.1)',
-            fill: true,
-            tension: 0.4,
-            pointRadius: 3,
-            pointBackgroundColor: '#6366f1',
-            pointBorderColor: 'transparent',
-            pointHoverRadius: 6,
-            pointHoverBackgroundColor: '#6366f1',
-            pointHoverBorderColor: '#fff',
-            pointHoverBorderWidth: 2,
-        }],
-    };
+    const trendChartData = useMemo(() => {
+        const hasExcludedTrend = hasExcluded && dailyExcludedData.length > 0;
+        if (!hasExcludedTrend) {
+            return {
+                labels: dailyData.map(d => d.date.slice(5)),
+                datasets: [{
+                    label: 'Hours',
+                    data: dailyData.map(d => d.hours),
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#6366f1',
+                    pointBorderColor: 'transparent',
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#6366f1',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                }],
+            };
+        }
+
+        const dates = Array.from(new Set([
+            ...dailyData.map(d => d.date),
+            ...dailyExcludedData.map(d => d.date),
+        ])).sort();
+
+        const workedMap = new Map(dailyData.map(d => [d.date, d.hours]));
+        const excludedMap = new Map(dailyExcludedData.map(d => [d.date, d.hours]));
+
+        return {
+            labels: dates.map(d => d.slice(5)),
+            datasets: [
+                {
+                    label: 'Worked Hours',
+                    data: dates.map(d => workedMap.get(d) || 0),
+                    borderColor: '#6366f1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#6366f1',
+                    pointBorderColor: 'transparent',
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#6366f1',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                },
+                {
+                    label: 'Excluded Hours',
+                    data: dates.map(d => excludedMap.get(d) || 0),
+                    borderColor: '#f59e0b',
+                    borderDash: [5, 5],
+                    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                    fill: false,
+                    tension: 0.4,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#f59e0b',
+                    pointBorderColor: 'transparent',
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#f59e0b',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2,
+                },
+            ],
+        };
+    }, [dailyData, dailyExcludedData, hasExcluded]);
 
     const balanceData = useMemo(
         () => aggregateCumulativeBalance(records, targetHours * 60),
@@ -486,18 +739,31 @@ export default function Charts({ records, config, billableTags = [], billableTar
 
     const doughnutData = useMemo(() => {
         const groups = groupedTagData.slice(0, 10);
+        let exColorIdx = 0;
+        let regColorIdx = 0;
+        const sliceColors = groups.map(g => {
+            if (isTagExcluded(g.tag, excludedTags)) {
+                const col = EXCLUDED_TAG_COLORS[exColorIdx % EXCLUDED_TAG_COLORS.length];
+                exColorIdx++;
+                return { bg: col + 'cc', border: col };
+            }
+            const col = TAG_COLORS[regColorIdx % TAG_COLORS.length];
+            regColorIdx++;
+            return { bg: col + 'cc', border: col };
+        });
+
         return {
-            labels: groups.map(g => '#' + g.tag),
+            labels: groups.map(g => '#' + g.tag + (isTagExcluded(g.tag, excludedTags) ? ' (excluded)' : '')),
             datasets: [{
                 data: groups.map(g => g.hours),
-                backgroundColor: groups.map((g, i) => TAG_COLORS[i % TAG_COLORS.length] + 'cc'),
-                borderColor: groups.map((g, i) => TAG_COLORS[i % TAG_COLORS.length]),
+                backgroundColor: sliceColors.map(c => c.bg),
+                borderColor: sliceColors.map(c => c.border),
                 borderWidth: 2,
                 hoverOffset: 6,
                 _groups: groups,
             }],
         };
-    }, [groupedTagData]);
+    }, [groupedTagData, excludedTags]);
 
     return (
         <div className="charts-grid animate-slide-up">
@@ -773,15 +1039,34 @@ export default function Charts({ records, config, billableTags = [], billableTar
                     {(() => {
                         const totalHours = groupedTagData.reduce((sum, g) => sum + g.hours, 0);
                         const maxHours = groupedTagData[0]?.hours || 1;
-                        return groupedTagData.slice(0, 15).map((group, i) => {
+                        let regColorIdx = 0;
+                        return groupedTagData.slice(0, 15).map((group) => {
+                            const isEx = isTagExcluded(group.tag, excludedTags);
                             const pct = (group.hours / maxHours) * 100;
                             const sharePct = totalHours > 0 ? (group.hours / totalHours) * 100 : 0;
-                            const color = TAG_COLORS[i % TAG_COLORS.length];
+                            const color = isEx ? '#f59e0b' : TAG_COLORS[regColorIdx % TAG_COLORS.length];
+                            if (!isEx) regColorIdx++;
                             const hasChildren = group.children.some(c => c.tag !== '(direct)');
                             return (
                                 <div key={group.tag} className="tag-breakdown-group">
                                     <div className="tag-breakdown-item">
-                                        <span className="tag-breakdown-name">#{group.tag}</span>
+                                        <span className="tag-breakdown-name">
+                                            #{group.tag}
+                                            {isEx && (
+                                                <span style={{
+                                                    marginLeft: '6px',
+                                                    fontSize: '10px',
+                                                    background: 'rgba(245, 158, 11, 0.18)',
+                                                    color: '#f59e0b',
+                                                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                                                    borderRadius: '4px',
+                                                    padding: '1px 5px',
+                                                    fontWeight: '600',
+                                                }}>
+                                                    excluded
+                                                </span>
+                                            )}
+                                        </span>
                                         <div className="tag-breakdown-bar">
                                             <div
                                                 className="tag-breakdown-fill"

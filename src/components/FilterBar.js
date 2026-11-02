@@ -4,7 +4,11 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
-export default function FilterBar({ filters, onFilterChange, allTags }) {
+export default function FilterBar({
+    filters,
+    onFilterChange,
+    allTags,
+}) {
     const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
     const [tagSearch, setTagSearch] = useState('');
     const dropdownRef = useRef(null);

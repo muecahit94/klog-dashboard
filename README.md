@@ -11,6 +11,7 @@ A beautiful visual dashboard for [klog](https://github.com/jotaen/klog) time tra
 - **📅 Date Range Filter** – Focus on specific time periods.
 - **⚡ Quick Date Presets** – One-click Today, This Week, This Month, Last Month, This Quarter, This Half Year, This Year, and All Time.
 - **🏷️ Tag Filter** – Multi-select tags to drill into projects.
+- **🚫 Excluded Tags** – Exclude non-work tags (e.g. vacation, sick leave) from balance calculations, activate/deactivate them individually or globally, and display them in a distinct color directly in charts and tables.
 - **🔍 Free-Text Search** – Search across all summaries, dates, and file names.
 - **📊 Interactive Charts** – Daily/weekly/monthly bar chart (stack by tag or by **billable/non-billable**), tag distribution doughnut, trend line.
 - **🗓️ Activity Heatmap** – GitHub-style contribution heatmap.
@@ -84,7 +85,7 @@ The dashboard is configured via environment variables.
 |----------|-------------|---------|
 | `KLOG_DATA_DIR` | Directory containing `.klg`, `.klog`, `.txt` files | `./data` |
 | `KLOG_DAILY_TARGET_HOURS` | Daily work hours target for "Should vs Actual" | `8.0` |
-| `KLOG_EXCLUDED_TAGS` | Comma-separated tags excluded from all calculations (e.g. `vacation,sickleave,holiday`) | _(empty)_ |
+| `KLOG_EXCLUDED_TAGS` | Comma-separated tags excluded from work balance calculations (e.g. `vacation,sickleave,holiday`). Can be toggled on/off and visualized in charts in amber | _(empty)_ |
 | `KLOG_BILLABLE_TAGS` | Comma-separated tags counted as billable in the Billable vs Non-billable split (empty hides the billable views) | _(empty)_ |
 | `KLOG_BILLABLE_TARGET_PERCENT` | Target billable percentage goal (0-100; 0 disables it) | `0` |
 

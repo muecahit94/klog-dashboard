@@ -16,7 +16,7 @@ function matchesHighlight(entry, highlight) {
     return false;
 }
 
-export default function EntriesTable({ records, onTagClick, highlight, onClearHighlight, onApplyHighlightFilter }) {
+export default function EntriesTable({ records, onTagClick, highlight, onClearHighlight, onApplyHighlightFilter, excludedTags = [] }) {
     const [sortField, setSortField] = useState('date');
     const [sortDir, setSortDir] = useState('desc');
     const [page, setPage] = useState(0);
@@ -37,6 +37,7 @@ export default function EntriesTable({ records, onTagClick, highlight, onClearHi
                     raw: e.raw,
                     fileName: r.fileName,
                     recordSummary: r.summary,
+                    isExcluded: e.isExcluded || r.isExcluded || false,
                 });
             }
         }
@@ -162,7 +163,7 @@ export default function EntriesTable({ records, onTagClick, highlight, onClearHi
                                 return (
                                     <React.Fragment key={rowKey}>
                                         <tr
-                                            className={`${isHighlighted ? 'row-highlighted' : ''}${isExpanded ? ' row-expanded' : ''}`}
+                                            className={`${isHighlighted ? 'row-highlighted' : ''}${isExpanded ? ' row-expanded' : ''}${entry.isExcluded ? ' row-excluded' : ''}`}
                                             onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
                                             style={{ cursor: 'pointer' }}
                                             title="Click for full entry details"
@@ -172,6 +173,19 @@ export default function EntriesTable({ records, onTagClick, highlight, onClearHi
                                                     {isExpanded ? '▾' : '▸'}
                                                 </span>
                                                 {entry.date}
+                                                {entry.isExcluded && (
+                                                    <span style={{
+                                                        marginLeft: '6px',
+                                                        fontSize: '10px',
+                                                        padding: '1px 5px',
+                                                        borderRadius: '4px',
+                                                        background: 'rgba(245, 158, 11, 0.15)',
+                                                        color: '#f59e0b',
+                                                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                                                    }}>
+                                                        excluded
+                                                    </span>
+                                                )}
                                             </td>
                                             <td>
                                                 <span style={{
@@ -194,18 +208,39 @@ export default function EntriesTable({ records, onTagClick, highlight, onClearHi
                                                 {entry.summary || <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                             </td>
                                             <td>
-                                                {entry.tags.map(t => (
-                                                    <span
-                                                        key={typeof t === 'string' ? t : t.full}
-                                                        className="tag-badge"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            onTagClick?.(typeof t === 'string' ? t : t.full);
-                                                        }}
-                                                    >
-                                                        #{typeof t === 'string' ? t : t.full}
-                                                    </span>
-                                                ))}
+                                                {entry.tags.map(t => {
+                                                    const tagName = typeof t === 'string' ? t : t.full;
+                                                    const clean = tagName.replace(/^#/, '').toLowerCase();
+                                                    const isEx = excludedTags && excludedTags.some(et => et.toLowerCase() === clean);
+                                                    return (
+                                                        <span
+                                                            key={tagName}
+                                                            className={`tag-badge ${isEx ? 'tag-badge-excluded' : ''}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onTagClick?.(tagName);
+                                                            }}
+                                                            style={isEx ? {
+                                                                background: 'rgba(245, 158, 11, 0.15)',
+                                                                borderColor: 'rgba(245, 158, 11, 0.4)',
+                                                                color: '#f59e0b',
+                                                            } : undefined}
+                                                        >
+                                                            #{tagName}
+                                                            {isEx && (
+                                                                <span style={{
+                                                                    marginLeft: '4px',
+                                                                    fontSize: '9px',
+                                                                    opacity: 0.85,
+                                                                    textTransform: 'uppercase',
+                                                                    fontWeight: 600,
+                                                                }}>
+                                                                    excluded
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                })}
                                             </td>
                                         </tr>
                                         {isExpanded && (

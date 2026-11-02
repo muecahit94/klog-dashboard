@@ -47,6 +47,11 @@ graph TD
 - **Entry-Level**: Search and Tag filters apply to *entries*, not just records. If a record has 5 entries but only 1 matches, only that 1 entry is used for charts/totals.
 - **Date-Level**: Date range filters apply to the entire day/record.
 
+### 4. Excluded Tags
+- **Purpose**: Tags like `#vacation`, `#holiday`, `#sickleave` are excluded from regular work balance calculations.
+- **Configuration & Visibility**: Managed strictly within the Settings modal (`⚙️ Settings`). Users can add, remove, activate/deactivate individual tags, and toggle their visibility in charts. Defaults can be pre-configured via `KLOG_EXCLUDED_TAGS`.
+- **Visual Distinction**: When visible in charts, active excluded tags are rendered in a distinct amber color palette (`EXCLUDED_TAG_COLORS`) across the Time Overview bar chart, Tag Distribution doughnut, Trend line, and Tag Breakdown.
+
 ## 🛠️ Common Tasks for Agents
 
 ### Adding a New Chart

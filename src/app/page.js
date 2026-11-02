@@ -9,13 +9,15 @@ import Charts from '@/components/Charts';
 import BillableSplit from '@/components/BillableSplit';
 import Heatmap from '@/components/Heatmap';
 import EntriesTable from '@/components/EntriesTable';
-import { filterRecords, getAllTags, excludeTagsFromRecords, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
+import { filterRecords, getAllTags, excludeTagsFromRecords, getExcludedRecords, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
 
 import pkg from '../../package.json';
 
 const STORAGE_KEY = 'klog-dashboard-records';
 const THEME_KEY = 'klog-dashboard-theme';
 const EXCLUDE_KEY = 'klog-dashboard-excluded-tags';
+const EXCLUDE_DEACTIVATED_KEY = 'klog-dashboard-excluded-tags-deactivated';
+const SHOW_EXCLUDED_KEY = 'klog-dashboard-show-excluded';
 const BILLABLE_KEY = 'klog-dashboard-billable-tags';
 const BILLABLE_TARGET_KEY = 'klog-dashboard-billable-target';
 // Snapshots of the last env-provided value applied, so a changed docker/env
@@ -36,6 +38,8 @@ export default function Home() {
     const [config, setConfig] = useState(null);
     const [theme, setTheme] = useState('dark');
     const [excludedTags, setExcludedTags] = useState([]);
+    const [deactivatedExcludedTags, setDeactivatedExcludedTags] = useState([]);
+    const [showExcluded, setShowExcluded] = useState(true);
     const [excludeLoaded, setExcludeLoaded] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [excludeInput, setExcludeInput] = useState('');
@@ -73,13 +77,30 @@ export default function Home() {
         });
     }, []);
 
-    // Load persisted excluded tags on mount
+    // Load persisted excluded tags, deactivated tags, and showExcluded on mount
     useEffect(() => {
         try {
             const raw = localStorage.getItem(EXCLUDE_KEY);
             if (raw !== null) {
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed)) setExcludedTags(parsed);
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const rawDeact = localStorage.getItem(EXCLUDE_DEACTIVATED_KEY);
+            if (rawDeact !== null) {
+                const parsed = JSON.parse(rawDeact);
+                if (Array.isArray(parsed)) setDeactivatedExcludedTags(parsed);
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const rawShow = localStorage.getItem(SHOW_EXCLUDED_KEY);
+            if (rawShow !== null) {
+                setShowExcluded(rawShow === 'true');
             }
         } catch (e) {
             // ignore
@@ -133,6 +154,38 @@ export default function Home() {
         }
     }, []);
 
+    const activeExcludedTags = useMemo(() => {
+        const deactSet = new Set(deactivatedExcludedTags.map(t => String(t).toLowerCase()));
+        return excludedTags.filter(t => !deactSet.has(t.toLowerCase()));
+    }, [excludedTags, deactivatedExcludedTags]);
+
+    const toggleExcludedTagActive = useCallback((raw) => {
+        const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
+        if (!name) return;
+        setDeactivatedExcludedTags(prev => {
+            const isDeact = prev.includes(name);
+            const next = isDeact ? prev.filter(t => t !== name) : [...prev, name];
+            try {
+                localStorage.setItem(EXCLUDE_DEACTIVATED_KEY, JSON.stringify(next));
+            } catch (e) {
+                // ignore
+            }
+            return next;
+        });
+    }, []);
+
+    const toggleShowExcluded = useCallback(() => {
+        setShowExcluded(prev => {
+            const next = !prev;
+            try {
+                localStorage.setItem(SHOW_EXCLUDED_KEY, String(next));
+            } catch (e) {
+                // ignore
+            }
+            return next;
+        });
+    }, []);
+
     const addExcludedTag = useCallback((raw) => {
         const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
         if (!name) return;
@@ -142,6 +195,16 @@ export default function Home() {
             persistExcluded(next);
             return next;
         });
+        setDeactivatedExcludedTags(prev => {
+            if (!prev.includes(name)) return prev;
+            const next = prev.filter(t => t !== name);
+            try {
+                localStorage.setItem(EXCLUDE_DEACTIVATED_KEY, JSON.stringify(next));
+            } catch (e) {
+                // ignore
+            }
+            return next;
+        });
         setExcludeInput('');
     }, [persistExcluded]);
 
@@ -149,6 +212,16 @@ export default function Home() {
         setExcludedTags(prev => {
             const next = prev.filter(t => t !== name);
             persistExcluded(next);
+            return next;
+        });
+        setDeactivatedExcludedTags(prev => {
+            if (!prev.includes(name)) return prev;
+            const next = prev.filter(t => t !== name);
+            try {
+                localStorage.setItem(EXCLUDE_DEACTIVATED_KEY, JSON.stringify(next));
+            } catch (e) {
+                // ignore
+            }
             return next;
         });
     }, [persistExcluded]);
@@ -331,13 +404,37 @@ export default function Home() {
         localStorage.removeItem(STORAGE_KEY);
     }, []);
 
-    // Excluded tags are removed from every calculation and view; persists across sessions
+    // Excluded tags that are active are removed from regular balance calculations
     const activeRecords = useMemo(
-        () => excludeTagsFromRecords(records, excludedTags),
-        [records, excludedTags],
+        () => excludeTagsFromRecords(records, activeExcludedTags),
+        [records, activeExcludedTags],
     );
-    const allTags = useMemo(() => getAllTags(activeRecords), [activeRecords]);
+    const excludedRecords = useMemo(
+        () => getExcludedRecords(records, activeExcludedTags),
+        [records, activeExcludedTags],
+    );
+    const allTags = useMemo(() => getAllTags(records), [records]);
     const filteredRecords = useMemo(() => filterRecords(activeRecords, filters), [activeRecords, filters]);
+    const filteredExcludedRecords = useMemo(() => filterRecords(excludedRecords, filters), [excludedRecords, filters]);
+
+    const tableRecords = useMemo(() => {
+        if (!showExcluded || filteredExcludedRecords.length === 0) return filteredRecords;
+        const map = new Map();
+        for (const r of filteredRecords) {
+            map.set(`${r.date}|${r.summary}|${r.fileName}`, { ...r, entries: [...r.entries] });
+        }
+        for (const r of filteredExcludedRecords) {
+            const key = `${r.date}|${r.summary}|${r.fileName}`;
+            if (map.has(key)) {
+                const existing = map.get(key);
+                existing.entries = [...existing.entries, ...r.entries];
+                existing.totalMinutes += r.totalMinutes;
+            } else {
+                map.set(key, { ...r, entries: [...r.entries] });
+            }
+        }
+        return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+    }, [filteredRecords, filteredExcludedRecords, showExcluded]);
 
     const handleTagClick = useCallback((tag) => {
         const tagName = typeof tag === 'object' ? tag.full : tag;
@@ -376,9 +473,9 @@ export default function Home() {
     }, [highlight]);
 
     const handleExportCSV = useCallback(() => {
-        const headers = ['Date', 'Type', 'Duration (min)', 'Duration', 'Hours', 'Summary', 'Tags', 'File'];
+        const headers = ['Date', 'Type', 'Duration (min)', 'Duration', 'Hours', 'Summary', 'Tags', 'Excluded', 'File'];
         const rows = [];
-        for (const r of filteredRecords) {
+        for (const r of tableRecords) {
             for (const e of r.entries) {
                 const tags = (e.allTags || e.tags).map(t => '#' + (typeof t === 'string' ? t : t.full)).join(', ');
                 rows.push([
@@ -389,6 +486,7 @@ export default function Home() {
                     minutesToDecimalHours(e.minutes).toFixed(2),
                     `"${(e.summary || '').replace(/"/g, '""')}"`,
                     `"${tags}"`,
+                    e.isExcluded || r.isExcluded ? 'Yes' : 'No',
                     `"${r.fileName || ''}"`,
                 ].join(','));
             }
@@ -402,10 +500,10 @@ export default function Home() {
         a.click();
         URL.revokeObjectURL(url);
         setShowExportMenu(false);
-    }, [filteredRecords]);
+    }, [tableRecords]);
 
     const handleExportJSON = useCallback(() => {
-        const json = JSON.stringify(filteredRecords, null, 2);
+        const json = JSON.stringify(tableRecords, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -414,7 +512,7 @@ export default function Home() {
         a.click();
         URL.revokeObjectURL(url);
         setShowExportMenu(false);
-    }, [filteredRecords]);
+    }, [tableRecords]);
 
     const hasData = records.length > 0;
 
@@ -436,7 +534,7 @@ export default function Home() {
                         title="Settings"
                         aria-label="Open settings"
                     >
-                        ⚙️ Settings{excludedTags.length ? ` (${excludedTags.length})` : ''}
+                        ⚙️ Settings{excludedTags.length ? ` (${activeExcludedTags.length}/${excludedTags.length})` : ''}
                     </button>
                     {hasData && (
                         <>
@@ -482,24 +580,40 @@ export default function Home() {
                     />
 
                     {/* Summary Stats */}
-                    <SummaryCards records={filteredRecords} config={config} billableTags={billableTags} />
+                    <SummaryCards
+                        records={filteredRecords}
+                        excludedRecords={filteredExcludedRecords}
+                        showExcluded={showExcluded}
+                        config={config}
+                        billableTags={billableTags}
+                    />
 
                     {/* Billable vs Non-billable split */}
                     <BillableSplit records={filteredRecords} billableTags={billableTags} billableTarget={billableTarget} onHighlight={handleHighlight} />
 
                     {/* Charts */}
-                    <Charts records={filteredRecords} config={config} billableTags={billableTags} billableTarget={billableTarget} onHighlight={handleHighlight} />
+                    <Charts
+                        records={filteredRecords}
+                        excludedRecords={filteredExcludedRecords}
+                        config={config}
+                        billableTags={billableTags}
+                        billableTarget={billableTarget}
+                        excludedTags={activeExcludedTags}
+                        showExcluded={showExcluded}
+                        onHighlight={handleHighlight}
+                    />
 
                     {/* Heatmap */}
                     <Heatmap records={filteredRecords} billableTags={billableTags} onHighlight={handleHighlight} />
 
                     {/* Entries Table */}
                     <EntriesTable
-                        records={filteredRecords}
+                        records={tableRecords}
                         onTagClick={handleTagClick}
                         highlight={highlight}
                         onClearHighlight={clearHighlight}
                         onApplyHighlightFilter={applyHighlightAsFilter}
+                        excludedTags={activeExcludedTags}
                     />
                 </div>
             ) : (
@@ -596,8 +710,8 @@ export default function Home() {
                                 Excluded Tags
                             </h3>
                             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
-                                Removed from all charts, tables, and balance calculations
-                                (e.g. vacation, sickleave, holiday). Saved automatically.
+                                Removed from regular balance calculations (e.g. vacation, sickleave, holiday).
+                                Click any tag to activate or deactivate it.
                             </div>
                             <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
                                 <input
@@ -620,20 +734,67 @@ export default function Home() {
                                     Add
                                 </button>
                             </div>
-                            <div className="filter-chips" style={{ marginBottom: 0 }}>
+                            <div className="filter-chips" style={{ marginBottom: excludedTags.length > 0 ? '12px' : 0 }}>
                                 {excludedTags.length === 0 ? (
                                     <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                                         No excluded tags
                                     </span>
                                 ) : (
-                                    excludedTags.map(tag => (
-                                        <span key={tag} className="filter-chip">
-                                            #{tag}
-                                            <button onClick={() => removeExcludedTag(tag)}>×</button>
-                                        </span>
-                                    ))
+                                    excludedTags.map(tag => {
+                                        const isActive = activeExcludedTags.includes(tag);
+                                        return (
+                                            <span
+                                                key={tag}
+                                                className={`filter-chip ${isActive ? 'filter-chip-excluded' : 'filter-chip-deactivated'}`}
+                                                style={{ cursor: 'pointer' }}
+                                                onClick={() => toggleExcludedTagActive(tag)}
+                                                title={isActive ? `Click to deactivate #${tag}` : `Click to activate #${tag}`}
+                                            >
+                                                <span>{isActive ? '✓' : '⊘'}</span>
+                                                #{tag}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        removeExcludedTag(tag);
+                                                    }}
+                                                    title={`Remove #${tag}`}
+                                                >
+                                                    ×
+                                                </button>
+                                            </span>
+                                        );
+                                    })
                                 )}
                             </div>
+
+                            {excludedTags.length > 0 && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '8px 12px',
+                                    background: 'var(--bg-glass)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: 'var(--radius-sm)',
+                                }}>
+                                    <div>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                                            Show in Charts
+                                        </div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                            Display active excluded tags in amber in charts
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className={`btn btn-sm ${showExcluded ? 'btn-warning' : 'btn-secondary'}`}
+                                        onClick={toggleShowExcluded}
+                                        style={{ fontSize: '11px', padding: '4px 10px' }}
+                                    >
+                                        {showExcluded ? '👁️ Shown' : '👁️‍🗨️ Hidden'}
+                                    </button>
+                                </div>
+                            )}
                         </section>
 
                         {/* Billable tags */}

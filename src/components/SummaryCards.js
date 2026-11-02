@@ -2,13 +2,18 @@
 
 import { minutesToDecimalHours, aggregateBillable } from '@/lib/klogParser';
 
-export default function SummaryCards({ records, config, billableTags = [] }) {
+export default function SummaryCards({ records, excludedRecords = [], showExcluded = false, config, billableTags = [] }) {
     // Calculate from entries (not r.totalMinutes) so filtered records show correct totals
     const totalMinutes = records.reduce((sum, r) =>
         sum + r.entries.reduce((eSum, e) => eSum + (e.minutes || 0), 0), 0);
     const totalHours = minutesToDecimalHours(totalMinutes);
     const daysTracked = new Set(records.map(r => r.date)).size;
     const dailyAvg = daysTracked > 0 ? totalMinutes / daysTracked : 0;
+
+    const excludedMinutes = (showExcluded && excludedRecords.length > 0)
+        ? excludedRecords.reduce((sum, r) => sum + r.entries.reduce((eSum, e) => eSum + (e.minutes || 0), 0), 0)
+        : 0;
+    const excludedHours = minutesToDecimalHours(excludedMinutes);
 
     const allTags = new Set();
     records.forEach(r => {
@@ -36,7 +41,7 @@ export default function SummaryCards({ records, config, billableTags = [] }) {
         {
             icon: '⏱️',
             value: totalHours.toFixed(2) + 'h',
-            label: 'Total Hours',
+            label: excludedHours > 0 ? `Total Hours (+${excludedHours.toFixed(2)}h excluded)` : 'Total Hours',
         },
         {
             icon: '📅',

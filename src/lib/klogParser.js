@@ -152,8 +152,10 @@ function parseRecord(blockLines, fileName, startLine = 0, warnings = null) {
         }
     }
 
-    const recordSummary = summaryLines.join(' ').trim();
-    const recordTags = extractTags(recordSummary);
+    const firstLineRemainder = firstLine.replace(DATE_REGEX, '').replace(SHOULD_TOTAL_REGEX, '').trim();
+    const allSummaryText = [firstLineRemainder, ...summaryLines].filter(Boolean).join(' ').trim();
+    const recordSummary = summaryLines.join(' ').trim() || firstLineRemainder;
+    const recordTags = extractTags(allSummaryText);
 
     // Parse entries
     const entries = [];
@@ -702,17 +704,25 @@ export function aggregateByTag(records) {
  * @param {Array} records
  * @returns {Array<{tag: string, minutes: number, hours: number, children: Array<{tag: string, minutes: number, hours: number}>}>}
  */
-export function aggregateByTagGrouped(records) {
+export function aggregateByTagGrouped(records, excludedTags = []) {
+    const excludedSet = excludedTags && excludedTags.length
+        ? new Set(excludedTags.map(t => String(t).replace(/^#/, '').toLowerCase()))
+        : null;
+
     // primaryTag -> { minutes, children: { childTag -> minutes } }
     const map = {};
 
     const add = (tags, minutes) => {
         const names = tags.map(t => (typeof t === 'string' ? t : t.full));
-        const primary = names[0] || '(untagged)';
+        let primary = names[0] || '(untagged)';
+        if (excludedSet && excludedSet.size > 0) {
+            const ex = names.find(n => excludedSet.has(String(n || '').toLowerCase()));
+            if (ex) primary = ex;
+        }
         if (!map[primary]) map[primary] = { minutes: 0, children: {} };
         map[primary].minutes += minutes;
 
-        const secondary = names.slice(1);
+        const secondary = names.filter(n => n !== primary);
         if (secondary.length === 0) {
             map[primary].children['(direct)'] = (map[primary].children['(direct)'] || 0) + minutes;
         } else {
@@ -754,9 +764,14 @@ export function aggregateByTagGrouped(records) {
  * Helper: aggregate records by a period key with per-tag breakdowns.
  * @param {Array} records
  * @param {Function} keyFn - (record) => periodKey string
+ * @param {Array<string>} excludedTags - Optional list of excluded tag names to prioritize
  * @returns {Array<{key: string, tagBreakdown: Object<string, number>, subBreakdown: Object<string, Object<string, number>>}>}
  */
-function aggregateByPeriodWithTags(records, keyFn) {
+function aggregateByPeriodWithTags(records, keyFn, excludedTags = []) {
+    const excludedSet = excludedTags && excludedTags.length
+        ? new Set(excludedTags.map(t => String(t).replace(/^#/, '').toLowerCase()))
+        : null;
+
     // Map: periodKey -> { tagName -> totalMinutes }
     const map = {};
     // Map: periodKey -> primaryTag -> { subTag -> totalMinutes }
@@ -767,13 +782,15 @@ function aggregateByPeriodWithTags(records, keyFn) {
         if (!subMap[key]) subMap[key] = {};
         for (const entry of r.entries) {
             const tags = entry.tags.length > 0 ? entry.tags : r.tags;
-            const tag = getPrimaryTag(entry.tags, r.tags);
+            const tag = getPrimaryTag(entry.tags, r.tags, excludedSet);
             if (!map[key][tag]) map[key][tag] = 0;
             map[key][tag] += entry.minutes;
 
             // Track second/third/... hashtags grouped under the primary tag
             if (!subMap[key][tag]) subMap[key][tag] = {};
-            const secondary = tags.slice(1).map(t => (typeof t === 'string' ? t : t.full));
+            const secondary = tags
+                .map(t => (typeof t === 'string' ? t : t.full))
+                .filter(t => t !== tag);
             if (secondary.length > 0) {
                 const per = entry.minutes / secondary.length;
                 for (const child of secondary) {
@@ -787,29 +804,37 @@ function aggregateByPeriodWithTags(records, keyFn) {
         .map(([key, tagBreakdown]) => ({ key, tagBreakdown, subBreakdown: subMap[key] || {} }));
 }
 
-function getPrimaryTag(entryTags = [], recordTags = []) {
+function getPrimaryTag(entryTags = [], recordTags = [], excludedSet = null) {
     const tags = entryTags.length > 0 ? entryTags : recordTags;
-    const firstTag = tags[0];
+    if (!tags || tags.length === 0) return '(untagged)';
 
-    if (!firstTag) return '(untagged)';
+    if (excludedSet && excludedSet.size > 0) {
+        const exTag = tags.find(t => {
+            const name = typeof t === 'string' ? t : t.name;
+            return excludedSet.has(String(name || '').replace(/^#/, '').toLowerCase());
+        });
+        if (exTag) return typeof exTag === 'string' ? exTag : exTag.full;
+    }
+
+    const firstTag = tags[0];
     return typeof firstTag === 'string' ? firstTag : firstTag.full;
 }
 
-export function aggregateByDateWithTags(records) {
-    return aggregateByPeriodWithTags(records, r => r.date);
+export function aggregateByDateWithTags(records, excludedTags = []) {
+    return aggregateByPeriodWithTags(records, r => r.date, excludedTags);
 }
 
-export function aggregateByWeekWithTags(records) {
+export function aggregateByWeekWithTags(records, excludedTags = []) {
     return aggregateByPeriodWithTags(records, r => {
         const d = new Date(r.date);
         const weekStart = new Date(d);
         weekStart.setDate(d.getDate() - d.getDay() + 1);
         return weekStart.toISOString().slice(0, 10);
-    });
+    }, excludedTags);
 }
 
-export function aggregateByMonthWithTags(records) {
-    return aggregateByPeriodWithTags(records, r => r.date.slice(0, 7));
+export function aggregateByMonthWithTags(records, excludedTags = []) {
+    return aggregateByPeriodWithTags(records, r => r.date.slice(0, 7), excludedTags);
 }
 
 export function getAllTags(records) {
@@ -859,6 +884,52 @@ export function excludeTagsFromRecords(records, excludedTags = []) {
             entries,
             totalMinutes,
             totalFormatted: formatMinutes(totalMinutes),
+        });
+    }
+    return result;
+}
+
+/**
+ * Extract records containing only the entries carrying any of the excluded tag names.
+ * - If a record has record-level tags that match, all its entries are treated as excluded.
+ * - Otherwise, individual entries carrying an excluded tag are included.
+ * @param {Array} records
+ * @param {Array<string>} excludedTags
+ * @returns {Array} records containing only the excluded entries
+ */
+export function getExcludedRecords(records, excludedTags = []) {
+    if (!excludedTags || excludedTags.length === 0) return [];
+
+    const excluded = new Set(
+        excludedTags.map(t => String(t).replace(/^#/, '').toLowerCase()).filter(Boolean)
+    );
+    if (excluded.size === 0) return [];
+
+    const hasExcluded = (tags) => (tags || []).some(t => {
+        const name = typeof t === 'string' ? t : t.name;
+        return excluded.has(String(name || '').toLowerCase());
+    });
+
+    const result = [];
+    for (const r of records) {
+        const recordExcluded = hasExcluded(r.tags);
+        let entries = [];
+        if (recordExcluded) {
+            entries = r.entries.map(e => ({ ...e, isExcluded: true }));
+        } else {
+            entries = r.entries
+                .filter(e => hasExcluded(e.allTags || e.tags))
+                .map(e => ({ ...e, isExcluded: true }));
+        }
+        if (entries.length === 0) continue;
+
+        const totalMinutes = entries.reduce((sum, e) => sum + e.minutes, 0);
+        result.push({
+            ...r,
+            entries,
+            totalMinutes,
+            totalFormatted: formatMinutes(totalMinutes),
+            isExcluded: true,
         });
     }
     return result;

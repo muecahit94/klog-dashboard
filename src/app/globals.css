@@ -267,6 +267,17 @@ body::before {
   background: rgba(239, 68, 68, 0.2);
 }
 
+.btn-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-warning);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.btn-warning:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
@@ -462,6 +473,43 @@ body::before {
 
 .filter-chip button:hover {
   opacity: 1;
+}
+
+.filter-chip-excluded {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  color: var(--accent-warning) !important;
+}
+
+.filter-chip-excluded:hover {
+  background: rgba(245, 158, 11, 0.25) !important;
+}
+
+.filter-chip-deactivated {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px dashed var(--border-color) !important;
+  color: var(--text-muted) !important;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.filter-chip-deactivated:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.tag-badge-excluded {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  color: var(--accent-warning) !important;
+}
+
+.tag-badge-excluded:hover {
+  background: rgba(245, 158, 11, 0.25) !important;
+}
+
+.row-excluded {
+  background: rgba(245, 158, 11, 0.03);
 }
 
 .tag-select {
