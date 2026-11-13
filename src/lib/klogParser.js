@@ -624,6 +624,222 @@ export function aggregateBillable(records, billableTags = []) {
 }
 
 /**
+ * Validate a YYYY-MM-DD calendar date string.
+ * @param {string} dateStr
+ * @returns {boolean}
+ */
+export function isValidIsoDate(dateStr) {
+    if (typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/**
+ * Return today's local calendar date formatted as YYYY-MM-DD.
+ * @returns {string}
+ */
+export function getTodayIsoDate() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function accruedMonthsInYear(targetYear, startDate, endMonth) {
+    if (endMonth <= 0) return 0;
+    if (!startDate) return endMonth;
+
+    const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+    if (targetYear < startYear) return 0;
+    if (targetYear > startYear) return endMonth;
+    if (startMonth > endMonth) return 0;
+
+    const daysInStartMonth = new Date(Date.UTC(targetYear, startMonth, 0)).getUTCDate();
+    const firstMonthFraction = (daysInStartMonth - startDay + 1) / daysInStartMonth;
+    return firstMonthFraction + (endMonth - startMonth);
+}
+
+/**
+ * Compute accrued vacation days through the current (or reference) month for a given year,
+ * accounting for an optional employment startDate and year boundaries.
+ * @param {number} annualAllowance
+ * @param {string} startDate - 'YYYY-MM-DD' or empty
+ * @param {string|number} year - 'YYYY'
+ * @param {string} [asOfDate] - 'YYYY-MM-DD' cutoff (defaults to today; rounded to its YYYY-MM month)
+ * @returns {{effectiveAllowance: number, yearAllowance: number, annualAllowance: number, isProrated: boolean, isAccruedToDate: boolean, isBeforeStart: boolean, effectiveAsOfMonth: string}}
+ */
+export function calculateEffectiveVacationAllowance(
+    annualAllowance,
+    startDate,
+    year,
+    asOfDate = getTodayIsoDate(),
+) {
+    const annual = Math.max(0, Number(annualAllowance) || 0);
+    const validAsOf = isValidIsoDate(asOfDate) ? asOfDate : getTodayIsoDate();
+    const validAsOfMonth = validAsOf.slice(0, 7);
+    if (annual <= 0) {
+        return {
+            effectiveAllowance: 0,
+            yearAllowance: 0,
+            annualAllowance: 0,
+            isProrated: false,
+            isAccruedToDate: false,
+            isBeforeStart: false,
+            effectiveAsOfMonth: validAsOfMonth,
+        };
+    }
+
+    const asOfYear = Number(validAsOf.slice(0, 4));
+    const asOfMonth = Number(validAsOf.slice(5, 7));
+    const targetYear = /^\d{4}$/.test(String(year || '')) ? Number(year) : asOfYear;
+    const validStart = isValidIsoDate(startDate) ? startDate : '';
+
+    const fullYearMonths = accruedMonthsInYear(targetYear, validStart, 12);
+    const yearAllowance = fullYearMonths === 12
+        ? annual
+        : Math.round((annual * fullYearMonths / 12) * 10) / 10;
+
+    const endMonth = targetYear < asOfYear ? 12 : (targetYear > asOfYear ? 0 : asOfMonth);
+    const accruedMonths = accruedMonthsInYear(targetYear, validStart, endMonth);
+    const effectiveAllowance = accruedMonths === 12
+        ? annual
+        : Math.round((annual * accruedMonths / 12) * 10) / 10;
+
+    const endMonthKey = `${String(targetYear).padStart(4, '0')}-${String(endMonth).padStart(2, '0')}`;
+    const cutoffMonthKey = endMonth > 0 ? endMonthKey : validAsOfMonth;
+    const isBeforeStart = Boolean(
+        validStart && (targetYear < Number(validStart.slice(0, 4)) || validStart.slice(0, 7) > cutoffMonthKey),
+    );
+    const isAccruedToDate = validAsOfMonth < `${targetYear}-12`;
+
+    return {
+        effectiveAllowance,
+        yearAllowance,
+        annualAllowance: annual,
+        isProrated: effectiveAllowance < annual,
+        isAccruedToDate,
+        isBeforeStart,
+        effectiveAsOfMonth: validAsOfMonth,
+    };
+}
+
+/**
+ * Aggregate vacation and other leave usage (in minutes, hours, and work-day equivalents)
+ * from records, optionally scoped to a specific YYYY year and on/after startDate.
+ * Vacation tags take precedence over otherLeaveTags when an entry carries both.
+ * @param {Array} records
+ * @param {Object} options
+ * @param {Array<string>} [options.vacationTags]
+ * @param {Array<string>} [options.otherLeaveTags]
+ * @param {number} [options.dailyTargetMinutes]
+ * @param {string} [options.year] - 'YYYY' or 'all'
+ * @param {string} [options.startDate] - 'YYYY-MM-DD'
+ * @returns {{availableYears: Array<string>, vacationUsedMinutes: number, vacationUsedHours: number, vacationUsedDays: number, vacationBreakdown: Array, otherLeaveBreakdown: Array}}
+ */
+export function aggregateLeaveBalance(records, {
+    vacationTags = ['vacation'],
+    otherLeaveTags = [],
+    dailyTargetMinutes = 480,
+    year = 'all',
+    startDate = '',
+} = {}) {
+    const normalizeList = (arr) => (arr || [])
+        .map(t => String(t || '').replace(/^#/, '').toLowerCase())
+        .filter(Boolean);
+
+    const vacList = Array.from(new Set(normalizeList(vacationTags)));
+    const vacSet = new Set(vacList);
+    const otherList = Array.from(new Set(normalizeList(otherLeaveTags).filter(t => !vacSet.has(t))));
+    const otherSet = new Set(otherList);
+
+    const yearSet = new Set();
+    for (const r of records) {
+        if (r.date && r.date.length >= 4) yearSet.add(r.date.slice(0, 4));
+    }
+    const availableYears = Array.from(yearSet).sort();
+
+    const validStart = isValidIsoDate(startDate) ? startDate : '';
+    const scopedRecords = records.filter(r => {
+        if (year && year !== 'all' && !(r.date && r.date.startsWith(`${year}-`))) return false;
+        if (validStart && (!r.date || r.date < validStart)) return false;
+        return true;
+    });
+
+    const findMatch = (tags, targetSet) => {
+        for (const t of (tags || [])) {
+            const name = String(typeof t === 'string' ? t : t.name || '').replace(/^#/, '').toLowerCase();
+            if (targetSet.has(name)) return name;
+        }
+        return null;
+    };
+
+    const vacStats = {};
+    const otherStats = {};
+
+    const addBucket = (map, tag, date, minutes) => {
+        if (!map[tag]) map[tag] = { minutes: 0, dates: new Set() };
+        map[tag].minutes += minutes || 0;
+        if (date) map[tag].dates.add(date);
+    };
+
+    for (const r of scopedRecords) {
+        if (r.entries.length === 0) {
+            const vacMatch = findMatch(r.tags, vacSet);
+            if (vacMatch) {
+                addBucket(vacStats, vacMatch, r.date, r.totalMinutes);
+            } else {
+                const otherMatch = findMatch(r.tags, otherSet);
+                if (otherMatch) addBucket(otherStats, otherMatch, r.date, r.totalMinutes);
+            }
+            continue;
+        }
+        for (const e of r.entries) {
+            const tags = (e.allTags && e.allTags.length)
+                ? e.allTags
+                : [...(e.tags || []), ...(r.tags || [])];
+            const vacMatch = findMatch(tags, vacSet);
+            if (vacMatch) {
+                addBucket(vacStats, vacMatch, r.date, e.minutes);
+            } else {
+                const otherMatch = findMatch(tags, otherSet);
+                if (otherMatch) addBucket(otherStats, otherMatch, r.date, e.minutes);
+            }
+        }
+    }
+
+    const toDays = (minutes, dates) => (
+        dailyTargetMinutes > 0 ? minutes / dailyTargetMinutes : dates.size
+    );
+
+    const toRows = (map) => Object.entries(map)
+        .map(([tag, data]) => ({
+            tag,
+            minutes: data.minutes,
+            hours: minutesToDecimalHours(data.minutes),
+            days: toDays(data.minutes, data.dates),
+            dateCount: data.dates.size,
+        }))
+        .sort((a, b) => b.minutes - a.minutes);
+
+    const vacationBreakdown = toRows(vacStats);
+    const otherLeaveBreakdown = toRows(otherStats);
+
+    const vacationUsedMinutes = vacationBreakdown.reduce((s, r) => s + r.minutes, 0);
+    const vacationUsedDays = vacationBreakdown.reduce((s, r) => s + r.days, 0);
+
+    return {
+        availableYears,
+        vacationUsedMinutes,
+        vacationUsedHours: minutesToDecimalHours(vacationUsedMinutes),
+        vacationUsedDays,
+        vacationBreakdown,
+        otherLeaveBreakdown,
+    };
+}
+
+/**
  * Break down billable time by tag, showing each tag's share of the total
  * billable minutes. Only billable entries (those carrying a billable tag) are
  * counted. Each billable entry is attributed to its first-level tag (the first
