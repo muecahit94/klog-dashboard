@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-
+import { DEFAULT_WORKING_DAYS, parseWorkingDays } from '@/lib/klogParser';
 
 const DEFAULT_CONFIG = {
     dailyTargetHours: 8.0,
+    workingDays: DEFAULT_WORKING_DAYS,
     excludedTags: [],
     billableTags: [],
     billableTargetPercent: 0
@@ -17,8 +18,16 @@ export async function GET() {
         // Only use Environment Variables
         if (process.env.KLOG_DAILY_TARGET_HOURS) {
             const envTarget = parseFloat(process.env.KLOG_DAILY_TARGET_HOURS);
-            if (!isNaN(envTarget)) {
-                config.dailyTargetHours = envTarget;
+            if (!isNaN(envTarget) && envTarget >= 0) {
+                config.dailyTargetHours = Math.min(envTarget, 24);
+            }
+        }
+
+        // Comma-separated working days (e.g. mon,tue,wed,thu,fri or 1,2,3,4,5)
+        if (process.env.KLOG_WORKING_DAYS) {
+            const parsedDays = parseWorkingDays(process.env.KLOG_WORKING_DAYS);
+            if (parsedDays !== null) {
+                config.workingDays = parsedDays;
             }
         }
 

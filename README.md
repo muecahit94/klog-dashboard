@@ -84,7 +84,8 @@ The dashboard is configured via environment variables.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `KLOG_DATA_DIR` | Directory containing `.klg`, `.klog`, `.txt` files | `./data` |
-| `KLOG_DAILY_TARGET_HOURS` | Daily work hours target for "Should vs Actual" | `8.0` |
+| `KLOG_DAILY_TARGET_HOURS` | Daily work hours target for "Should vs Actual" (adjustable in Settings) | `8.0` |
+| `KLOG_WORKING_DAYS` | Comma-separated working weekdays (e.g. `mon,tue,wed,thu,fri` or `1,2,3,4,5`); non-working days get a 0h fallback target (adjustable in Settings) | `mon,tue,wed,thu,fri` |
 | `KLOG_EXCLUDED_TAGS` | Comma-separated tags excluded from work balance calculations (e.g. `vacation,sickleave,holiday`). Can be toggled on/off and visualized in charts in amber | _(empty)_ |
 | `KLOG_BILLABLE_TAGS` | Comma-separated tags counted as billable in the Billable vs Non-billable split (empty hides the billable views) | _(empty)_ |
 | `KLOG_BILLABLE_TARGET_PERCENT` | Target billable percentage goal (0-100; 0 disables it) | `0` |

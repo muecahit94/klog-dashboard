@@ -403,16 +403,86 @@ export function aggregateByMonth(records) {
         .map(([month, minutes]) => ({ month, minutes, hours: minutesToDecimalHours(minutes) }));
 }
 
+export const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5]; // Mon–Fri (JS Date.getDay(): 0=Sun..6=Sat)
+
+const DAY_NAME_MAP = {
+    sun: 0, sunday: 0, '0': 0, '7': 0,
+    mon: 1, monday: 1, '1': 1,
+    tue: 2, tues: 2, tuesday: 2, '2': 2,
+    wed: 3, wednesday: 3, '3': 3,
+    thu: 4, thur: 4, thurs: 4, thursday: 4, '4': 4,
+    fri: 5, friday: 5, '5': 5,
+    sat: 6, saturday: 6, '6': 6,
+};
+
+/**
+ * Normalize a list or comma-separated string of working days into unique
+ * weekday numbers (0=Sunday .. 6=Saturday). Returns null when empty/unset
+ * unless explicitly "none" (which yields []).
+ * @param {Array<number|string>|string} raw
+ * @returns {Array<number>|null}
+ */
+export function parseWorkingDays(raw) {
+    if (Array.isArray(raw)) {
+        const set = new Set();
+        for (const item of raw) {
+            const key = String(item ?? '').trim().toLowerCase();
+            if (key in DAY_NAME_MAP) set.add(DAY_NAME_MAP[key]);
+        }
+        return Array.from(set).sort((a, b) => a - b);
+    }
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim().toLowerCase();
+        if (!trimmed) return null;
+        if (trimmed === 'none') return [];
+        const set = new Set();
+        for (const token of trimmed.split(',')) {
+            const key = token.trim().toLowerCase();
+            if (key in DAY_NAME_MAP) set.add(DAY_NAME_MAP[key]);
+        }
+        return set.size > 0 ? Array.from(set).sort((a, b) => a - b) : null;
+    }
+    return null;
+}
+
+/**
+ * Return JS day-of-week (0=Sunday .. 6=Saturday) for a YYYY-MM-DD string,
+ * computed in UTC to avoid local DST shifts.
+ * @param {string} dateStr
+ * @returns {number|null}
+ */
+export function getDayOfWeek(dateStr) {
+    if (!dateStr) return null;
+    const parts = String(dateStr).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    const [y, m, d] = parts;
+    return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/**
+ * Check whether a YYYY-MM-DD date falls on one of the configured working days.
+ * @param {string} dateStr
+ * @param {Array<number>} workingDays
+ * @returns {boolean}
+ */
+export function isWorkingDay(dateStr, workingDays = DEFAULT_WORKING_DAYS) {
+    const dow = getDayOfWeek(dateStr);
+    if (dow === null) return true;
+    const days = Array.isArray(workingDays) ? workingDays : DEFAULT_WORKING_DAYS;
+    return days.includes(dow);
+}
+
 /**
  * Aggregate the running (cumulative) time balance per day.
  * Daily balance = actual worked minutes - "should" minutes for that day.
- * The "should" value uses a record's own should-total when present,
- * otherwise falls back to the configured daily target.
+ * The "should" value uses a record's own should-total when present;
+ * otherwise it falls back to targetMinutes on working days and 0 on non-working days.
  * @param {Array} records
  * @param {number} targetMinutes - Fallback daily target in minutes
+ * @param {Array<number>} [workingDays] - Active working weekdays (0=Sun..6=Sat)
  * @returns {Array<{date: string, actualMinutes: number, shouldMinutes: number, dailyMinutes: number, dailyHours: number, cumulativeMinutes: number, cumulativeHours: number}>}
  */
-export function aggregateCumulativeBalance(records, targetMinutes = 480) {
+export function aggregateCumulativeBalance(records, targetMinutes = 480, workingDays = DEFAULT_WORKING_DAYS) {
     const byDate = {};
     for (const r of records) {
         if (!byDate[r.date]) byDate[r.date] = { actual: 0, should: 0, hasShould: false };
@@ -428,7 +498,8 @@ export function aggregateCumulativeBalance(records, targetMinutes = 480) {
         .sort((a, b) => a.localeCompare(b))
         .map(date => {
             const d = byDate[date];
-            const should = d.hasShould ? d.should : targetMinutes;
+            const fallback = isWorkingDay(date, workingDays) ? targetMinutes : 0;
+            const should = d.hasShould ? d.should : fallback;
             const daily = d.actual - should;
             cumulative += daily;
             return {

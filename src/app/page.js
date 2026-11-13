@@ -9,7 +9,16 @@ import Charts from '@/components/Charts';
 import BillableSplit from '@/components/BillableSplit';
 import Heatmap from '@/components/Heatmap';
 import EntriesTable from '@/components/EntriesTable';
-import { filterRecords, getAllTags, excludeTagsFromRecords, getExcludedRecords, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
+import {
+    filterRecords,
+    getAllTags,
+    excludeTagsFromRecords,
+    getExcludedRecords,
+    minutesToDecimalHours,
+    formatMinutes,
+    DEFAULT_WORKING_DAYS,
+    parseWorkingDays,
+} from '@/lib/klogParser';
 
 import pkg from '../../package.json';
 
@@ -20,11 +29,25 @@ const EXCLUDE_DEACTIVATED_KEY = 'klog-dashboard-excluded-tags-deactivated';
 const SHOW_EXCLUDED_KEY = 'klog-dashboard-show-excluded';
 const BILLABLE_KEY = 'klog-dashboard-billable-tags';
 const BILLABLE_TARGET_KEY = 'klog-dashboard-billable-target';
+const DAILY_TARGET_KEY = 'klog-dashboard-daily-target';
+const WORKING_DAYS_KEY = 'klog-dashboard-working-days';
 // Snapshots of the last env-provided value applied, so a changed docker/env
 // variable overrides a stale localStorage value while user edits still persist.
 const EXCLUDE_ENV_KEY = 'klog-dashboard-excluded-tags-env';
 const BILLABLE_ENV_KEY = 'klog-dashboard-billable-tags-env';
 const BILLABLE_TARGET_ENV_KEY = 'klog-dashboard-billable-target-env';
+const DAILY_TARGET_ENV_KEY = 'klog-dashboard-daily-target-env';
+const WORKING_DAYS_ENV_KEY = 'klog-dashboard-working-days-env';
+
+const WEEKDAY_BUTTONS = [
+    { day: 1, label: 'Mon' },
+    { day: 2, label: 'Tue' },
+    { day: 3, label: 'Wed' },
+    { day: 4, label: 'Thu' },
+    { day: 5, label: 'Fri' },
+    { day: 6, label: 'Sat' },
+    { day: 0, label: 'Sun' },
+];
 
 export default function Home() {
     const [records, setRecords] = useState([]);
@@ -48,6 +71,10 @@ export default function Home() {
     const [billableInput, setBillableInput] = useState('');
     const [billableTarget, setBillableTarget] = useState(0);
     const [billableTargetLoaded, setBillableTargetLoaded] = useState(false);
+    const [dailyTargetHours, setDailyTargetHours] = useState(8.0);
+    const [dailyTargetInput, setDailyTargetInput] = useState('8');
+    const [workingDays, setWorkingDays] = useState(DEFAULT_WORKING_DAYS);
+    const [scheduleLoaded, setScheduleLoaded] = useState(false);
     // Cross-dashboard drill-down: {kind:'dateRange',from,to,label} | {kind:'tag',value,label}
     const [highlight, setHighlight] = useState(null);
 
@@ -324,6 +351,97 @@ export default function Home() {
         }
     }, []);
 
+    // Load persisted daily target and working days on mount
+    useEffect(() => {
+        try {
+            const rawTarget = localStorage.getItem(DAILY_TARGET_KEY);
+            if (rawTarget !== null) {
+                const parsed = parseFloat(rawTarget);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    const clamped = Math.min(parsed, 24);
+                    setDailyTargetHours(clamped);
+                    setDailyTargetInput(String(clamped));
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const rawDays = localStorage.getItem(WORKING_DAYS_KEY);
+            if (rawDays !== null) {
+                const parsed = parseWorkingDays(JSON.parse(rawDays));
+                if (parsed !== null) setWorkingDays(parsed);
+            }
+        } catch (e) {
+            // ignore
+        }
+        setScheduleLoaded(true);
+    }, []);
+
+    // Seed daily target & working days from env defaults when env config changes
+    useEffect(() => {
+        if (!scheduleLoaded || !config) return;
+
+        const envTargetRaw = Number(config.dailyTargetHours);
+        const envTarget = Number.isFinite(envTargetRaw) ? Math.min(Math.max(envTargetRaw, 0), 24) : 8.0;
+        const targetSnap = String(envTarget);
+        try {
+            if (localStorage.getItem(DAILY_TARGET_ENV_KEY) !== targetSnap) {
+                setDailyTargetHours(envTarget);
+                setDailyTargetInput(targetSnap);
+                localStorage.setItem(DAILY_TARGET_KEY, targetSnap);
+                localStorage.setItem(DAILY_TARGET_ENV_KEY, targetSnap);
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        const envDays = parseWorkingDays(config.workingDays) ?? DEFAULT_WORKING_DAYS;
+        const daysSnap = JSON.stringify(envDays);
+        try {
+            if (localStorage.getItem(WORKING_DAYS_ENV_KEY) !== daysSnap) {
+                setWorkingDays(envDays);
+                localStorage.setItem(WORKING_DAYS_KEY, daysSnap);
+                localStorage.setItem(WORKING_DAYS_ENV_KEY, daysSnap);
+            }
+        } catch (e) {
+            // ignore
+        }
+    }, [config, scheduleLoaded]);
+
+    const handleDailyTargetChange = useCallback((raw) => {
+        setDailyTargetInput(raw);
+        if (raw.trim() === '') return;
+        const num = parseFloat(raw);
+        if (isNaN(num) || num < 0) return;
+        const clamped = Math.min(num, 24);
+        setDailyTargetHours(clamped);
+        try {
+            localStorage.setItem(DAILY_TARGET_KEY, String(clamped));
+        } catch (e) {
+            // ignore
+        }
+    }, []);
+
+    const handleDailyTargetBlur = useCallback(() => {
+        setDailyTargetInput(String(dailyTargetHours));
+    }, [dailyTargetHours]);
+
+    const toggleWorkingDay = useCallback((day) => {
+        setWorkingDays(prev => {
+            const exists = prev.includes(day);
+            const next = exists
+                ? prev.filter(d => d !== day)
+                : [...prev, day].sort((a, b) => a - b);
+            try {
+                localStorage.setItem(WORKING_DAYS_KEY, JSON.stringify(next));
+            } catch (e) {
+                // ignore
+            }
+            return next;
+        });
+    }, []);
+
     // Fetch config on mount
     useEffect(() => {
         fetch('/api/config')
@@ -585,6 +703,8 @@ export default function Home() {
                         excludedRecords={filteredExcludedRecords}
                         showExcluded={showExcluded}
                         config={config}
+                        dailyTargetHours={dailyTargetHours}
+                        workingDays={workingDays}
                         billableTags={billableTags}
                     />
 
@@ -596,6 +716,8 @@ export default function Home() {
                         records={filteredRecords}
                         excludedRecords={filteredExcludedRecords}
                         config={config}
+                        dailyTargetHours={dailyTargetHours}
+                        workingDays={workingDays}
                         billableTags={billableTags}
                         billableTarget={billableTarget}
                         excludedTags={activeExcludedTags}
@@ -673,6 +795,8 @@ export default function Home() {
                         style={{
                             width: '100%',
                             maxWidth: '460px',
+                            maxHeight: 'calc(100vh - 96px)',
+                            overflowY: 'auto',
                             background: 'var(--bg-secondary)',
                             border: '1px solid var(--border-color)',
                             borderRadius: 'var(--radius-lg)',
@@ -701,6 +825,59 @@ export default function Home() {
                                 <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
                                     {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
                                 </button>
+                            </div>
+                        </section>
+
+                        {/* Work schedule & daily target */}
+                        <section style={{ marginBottom: '22px' }}>
+                            <h3 style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Work Schedule & Target
+                            </h3>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                                Fallback daily target when a day doesn&apos;t specify <code>(Xh!)</code>.
+                                Entries on non-working days have a 0h target. Saved automatically.
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+                                <input
+                                    className="filter-input"
+                                    type="number"
+                                    min="0"
+                                    max="24"
+                                    step="0.1"
+                                    aria-label="Daily target hours"
+                                    value={dailyTargetInput}
+                                    onChange={(e) => handleDailyTargetChange(e.target.value)}
+                                    onBlur={handleDailyTargetBlur}
+                                    style={{ width: '96px' }}
+                                />
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>h / day</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
+                                    {(dailyTargetHours * workingDays.length).toFixed(1)}h / week
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                {WEEKDAY_BUTTONS.map(({ day, label }) => {
+                                    const active = workingDays.includes(day);
+                                    return (
+                                        <button
+                                            key={day}
+                                            type="button"
+                                            onClick={() => toggleWorkingDay(day)}
+                                            aria-pressed={active}
+                                            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
+                                            style={{
+                                                flex: '1 1 0',
+                                                minWidth: '48px',
+                                                justifyContent: 'center',
+                                                padding: '6px 4px',
+                                                opacity: active ? 1 : 0.65,
+                                            }}
+                                            title={active ? `${label}: working day (click to mark off)` : `${label}: non-working day (0h target)`}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </section>
 

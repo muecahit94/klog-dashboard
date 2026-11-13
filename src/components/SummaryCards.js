@@ -1,8 +1,21 @@
 'use client';
 
-import { minutesToDecimalHours, aggregateBillable } from '@/lib/klogParser';
+import {
+    minutesToDecimalHours,
+    aggregateBillable,
+    aggregateCumulativeBalance,
+    DEFAULT_WORKING_DAYS,
+} from '@/lib/klogParser';
 
-export default function SummaryCards({ records, excludedRecords = [], showExcluded = false, config, billableTags = [] }) {
+export default function SummaryCards({
+    records,
+    excludedRecords = [],
+    showExcluded = false,
+    config,
+    dailyTargetHours,
+    workingDays = DEFAULT_WORKING_DAYS,
+    billableTags = [],
+}) {
     // Calculate from entries (not r.totalMinutes) so filtered records show correct totals
     const totalMinutes = records.reduce((sum, r) =>
         sum + r.entries.reduce((eSum, e) => eSum + (e.minutes || 0), 0), 0);
@@ -21,16 +34,12 @@ export default function SummaryCards({ records, excludedRecords = [], showExclud
         r.entries.forEach(e => e.tags.forEach(t => allTags.add(t.name)));
     });
 
-    const targetMin = (config?.dailyTargetHours || 8.0) * 60;
+    const resolvedTargetHours = dailyTargetHours ?? config?.dailyTargetHours ?? 8.0;
+    const targetMin = resolvedTargetHours * 60;
 
-    let shouldTotalMin = 0;
-    records.forEach(r => {
-        if (r.shouldTotal !== null) {
-            shouldTotalMin += r.shouldTotal;
-        } else {
-            shouldTotalMin += targetMin;
-        }
-    });
+    // Reuse date-level balance aggregation so Should vs Actual stays aligned with Cumulative Balance
+    const balanceDays = aggregateCumulativeBalance(records, targetMin, workingDays);
+    const shouldTotalMin = balanceDays.reduce((sum, d) => sum + d.shouldMinutes, 0);
     const diff = totalMinutes - shouldTotalMin;
 
     const totalEntries = records.reduce((sum, r) => sum + r.entries.length, 0);
@@ -64,8 +73,8 @@ export default function SummaryCards({ records, excludedRecords = [], showExclud
             label: 'Total Entries',
         },
         {
-            icon: shouldTotalMin > 0 ? (diff >= 0 ? '✅' : '⚠️') : '🎯',
-            value: shouldTotalMin > 0 ? (diff >= 0 ? '+' : '') + minutesToDecimalHours(diff).toFixed(2) + 'h' : '—',
+            icon: records.length > 0 ? (diff >= 0 ? '✅' : '⚠️') : '🎯',
+            value: records.length > 0 ? (diff >= 0 ? '+' : '') + minutesToDecimalHours(diff).toFixed(2) + 'h' : '—',
             label: 'Should vs Actual',
         },
     ];
