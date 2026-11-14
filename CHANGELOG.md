@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.0](https://github.com/muecahit94/klog-dashboard/compare/v1.10.0...v1.11.0) (2026-11-14)
+
+
+### Features
+
+* add leave balance tracker and vacation allowance support ([948c237](https://github.com/muecahit94/klog-dashboard/commit/948c237cf53d8f2884fab9e5632ed578f6e54762))
+* add leave balance tracker and vacation allowance support ([974ac93](https://github.com/muecahit94/klog-dashboard/commit/974ac9357ac67cf11a1a933a9eef5ec3ddee1818))
+* add support for customizable working days and daily work hours target ([45d7aad](https://github.com/muecahit94/klog-dashboard/commit/45d7aad1dcb9abe63a14f4c6d0e5bbbfb539f1e1))
+
 ## [1.10.0](https://github.com/muecahit94/klog-dashboard/compare/v1.9.2...v1.10.0) (2026-11-02)
 
 
