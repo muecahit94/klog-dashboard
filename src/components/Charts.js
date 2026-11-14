@@ -19,7 +19,7 @@ import {
     aggregateByDate, aggregateByWeek, aggregateByMonth,
     aggregateByDateWithTags, aggregateByWeekWithTags, aggregateByMonthWithTags,
     aggregateByTagGrouped, aggregateCumulativeBalance, aggregateCumulativeBillableBalance,
-    aggregateBillableByPeriod, minutesToDecimalHours,
+    aggregateBillableByPeriod, minutesToDecimalHours, DEFAULT_WORKING_DAYS,
 } from '@/lib/klogParser';
 
 ChartJS.register(
@@ -225,6 +225,8 @@ export default function Charts({
     records,
     excludedRecords = [],
     config,
+    dailyTargetHours,
+    workingDays = DEFAULT_WORKING_DAYS,
     billableTags = [],
     billableTarget = 0,
     excludedTags = [],
@@ -291,7 +293,7 @@ export default function Charts({
     const labelKey = timeMode === 'daily' ? 'date' :
         timeMode === 'weekly' ? 'week' : 'month';
 
-    const targetHours = config?.dailyTargetHours || 8.0;
+    const targetHours = dailyTargetHours ?? config?.dailyTargetHours ?? 8.0;
 
     const hasExcluded = showExcluded && excludedRecords.length > 0;
 
@@ -696,8 +698,8 @@ export default function Charts({
     }, [dailyData, dailyExcludedData, hasExcluded]);
 
     const balanceData = useMemo(
-        () => aggregateCumulativeBalance(records, targetHours * 60),
-        [records, targetHours],
+        () => aggregateCumulativeBalance(records, targetHours * 60, workingDays),
+        [records, targetHours, workingDays],
     );
 
     const billablePercent = Number(billableTarget) || 0;
@@ -1010,6 +1012,8 @@ export default function Charts({
                                         const lines = [`  Day: ${sign}${d.dailyHours.toFixed(2)}h`];
                                         if (balanceBillable) {
                                             lines.push(`  Billable: ${minutesToDecimalHours(d.actualMinutes).toFixed(2)}h · target ${minutesToDecimalHours(d.shouldMinutes).toFixed(2)}h`);
+                                        } else {
+                                            lines.push(`  Worked: ${minutesToDecimalHours(d.actualMinutes).toFixed(2)}h · target ${minutesToDecimalHours(d.shouldMinutes).toFixed(2)}h`);
                                         }
                                         return lines;
                                     },

@@ -16,7 +16,7 @@ The application is a **Next.js 16** app (React 19) running as a **standalone Nod
 | **Charts** | `src/components/Charts.js` | Renders Chart.js visualizations. |
 | **Filters** | `src/components/FilterBar.js` | Manages date range, quick date presets, tag selection, and search. |
 | **Files API** | `src/app/api/files/route.js` + `[name]/route.js` | Lists and serves klog files from `KLOG_DATA_DIR`. Extension-allow-listed and traversal-protected. |
-| **Config API** | `src/app/api/config/route.js` | Exposes runtime config from env vars (`KLOG_DAILY_TARGET_HOURS`, `KLOG_EXCLUDED_TAGS`). |
+| **Config API** | `src/app/api/config/route.js` | Exposes runtime config from env vars (`KLOG_DAILY_TARGET_HOURS`, `KLOG_WORKING_DAYS`, `KLOG_EXCLUDED_TAGS`, `KLOG_BILLABLE_TAGS`, `KLOG_BILLABLE_TARGET_PERCENT`, `KLOG_VACATION_ALLOWANCE_DAYS`, `KLOG_VACATION_TAGS`, `KLOG_VACATION_START_DATE`). |
 
 ### Data Flow
 

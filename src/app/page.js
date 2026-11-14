@@ -7,9 +7,21 @@ import FilterBar from '@/components/FilterBar';
 import SummaryCards from '@/components/SummaryCards';
 import Charts from '@/components/Charts';
 import BillableSplit from '@/components/BillableSplit';
+import LeaveBalance from '@/components/LeaveBalance';
 import Heatmap from '@/components/Heatmap';
 import EntriesTable from '@/components/EntriesTable';
-import { filterRecords, getAllTags, excludeTagsFromRecords, getExcludedRecords, minutesToDecimalHours, formatMinutes } from '@/lib/klogParser';
+import {
+    filterRecords,
+    getAllTags,
+    excludeTagsFromRecords,
+    getExcludedRecords,
+    minutesToDecimalHours,
+    formatMinutes,
+    DEFAULT_WORKING_DAYS,
+    parseWorkingDays,
+    calculateEffectiveVacationAllowance,
+    isValidIsoDate,
+} from '@/lib/klogParser';
 
 import pkg from '../../package.json';
 
@@ -20,11 +32,32 @@ const EXCLUDE_DEACTIVATED_KEY = 'klog-dashboard-excluded-tags-deactivated';
 const SHOW_EXCLUDED_KEY = 'klog-dashboard-show-excluded';
 const BILLABLE_KEY = 'klog-dashboard-billable-tags';
 const BILLABLE_TARGET_KEY = 'klog-dashboard-billable-target';
+const DAILY_TARGET_KEY = 'klog-dashboard-daily-target';
+const WORKING_DAYS_KEY = 'klog-dashboard-working-days';
+const VACATION_ALLOWANCE_KEY = 'klog-dashboard-vacation-allowance';
+const VACATION_TAGS_KEY = 'klog-dashboard-vacation-tags';
+const VACATION_START_DATE_KEY = 'klog-dashboard-vacation-start-date';
+const SHOW_VACATION_KEY = 'klog-dashboard-show-vacation';
 // Snapshots of the last env-provided value applied, so a changed docker/env
 // variable overrides a stale localStorage value while user edits still persist.
 const EXCLUDE_ENV_KEY = 'klog-dashboard-excluded-tags-env';
 const BILLABLE_ENV_KEY = 'klog-dashboard-billable-tags-env';
 const BILLABLE_TARGET_ENV_KEY = 'klog-dashboard-billable-target-env';
+const DAILY_TARGET_ENV_KEY = 'klog-dashboard-daily-target-env';
+const WORKING_DAYS_ENV_KEY = 'klog-dashboard-working-days-env';
+const VACATION_ALLOWANCE_ENV_KEY = 'klog-dashboard-vacation-allowance-env';
+const VACATION_TAGS_ENV_KEY = 'klog-dashboard-vacation-tags-env';
+const VACATION_START_DATE_ENV_KEY = 'klog-dashboard-vacation-start-date-env';
+
+const WEEKDAY_BUTTONS = [
+    { day: 1, label: 'Mon' },
+    { day: 2, label: 'Tue' },
+    { day: 3, label: 'Wed' },
+    { day: 4, label: 'Thu' },
+    { day: 5, label: 'Fri' },
+    { day: 6, label: 'Sat' },
+    { day: 0, label: 'Sun' },
+];
 
 export default function Home() {
     const [records, setRecords] = useState([]);
@@ -48,6 +81,16 @@ export default function Home() {
     const [billableInput, setBillableInput] = useState('');
     const [billableTarget, setBillableTarget] = useState(0);
     const [billableTargetLoaded, setBillableTargetLoaded] = useState(false);
+    const [dailyTargetHours, setDailyTargetHours] = useState(8.0);
+    const [dailyTargetInput, setDailyTargetInput] = useState('8');
+    const [workingDays, setWorkingDays] = useState(DEFAULT_WORKING_DAYS);
+    const [scheduleLoaded, setScheduleLoaded] = useState(false);
+    const [vacationAllowance, setVacationAllowance] = useState(0);
+    const [vacationTags, setVacationTags] = useState(['vacation']);
+    const [vacationStartDate, setVacationStartDate] = useState('');
+    const [showVacation, setShowVacation] = useState(false);
+    const [vacationInput, setVacationInput] = useState('');
+    const [vacationLoaded, setVacationLoaded] = useState(false);
     // Cross-dashboard drill-down: {kind:'dateRange',from,to,label} | {kind:'tag',value,label}
     const [highlight, setHighlight] = useState(null);
 
@@ -324,6 +367,242 @@ export default function Home() {
         }
     }, []);
 
+    // Load persisted daily target and working days on mount
+    useEffect(() => {
+        try {
+            const rawTarget = localStorage.getItem(DAILY_TARGET_KEY);
+            if (rawTarget !== null) {
+                const parsed = parseFloat(rawTarget);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    const clamped = Math.min(parsed, 24);
+                    setDailyTargetHours(clamped);
+                    setDailyTargetInput(String(clamped));
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const rawDays = localStorage.getItem(WORKING_DAYS_KEY);
+            if (rawDays !== null) {
+                const parsed = parseWorkingDays(JSON.parse(rawDays));
+                if (parsed !== null) setWorkingDays(parsed);
+            }
+        } catch (e) {
+            // ignore
+        }
+        setScheduleLoaded(true);
+    }, []);
+
+    // Seed daily target & working days from env defaults when env config changes
+    useEffect(() => {
+        if (!scheduleLoaded || !config) return;
+
+        const envTargetRaw = Number(config.dailyTargetHours);
+        const envTarget = Number.isFinite(envTargetRaw) ? Math.min(Math.max(envTargetRaw, 0), 24) : 8.0;
+        const targetSnap = String(envTarget);
+        try {
+            if (localStorage.getItem(DAILY_TARGET_ENV_KEY) !== targetSnap) {
+                setDailyTargetHours(envTarget);
+                setDailyTargetInput(targetSnap);
+                localStorage.setItem(DAILY_TARGET_KEY, targetSnap);
+                localStorage.setItem(DAILY_TARGET_ENV_KEY, targetSnap);
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        const envDays = parseWorkingDays(config.workingDays) ?? DEFAULT_WORKING_DAYS;
+        const daysSnap = JSON.stringify(envDays);
+        try {
+            if (localStorage.getItem(WORKING_DAYS_ENV_KEY) !== daysSnap) {
+                setWorkingDays(envDays);
+                localStorage.setItem(WORKING_DAYS_KEY, daysSnap);
+                localStorage.setItem(WORKING_DAYS_ENV_KEY, daysSnap);
+            }
+        } catch (e) {
+            // ignore
+        }
+    }, [config, scheduleLoaded]);
+
+    const handleDailyTargetChange = useCallback((raw) => {
+        setDailyTargetInput(raw);
+        if (raw.trim() === '') return;
+        const num = parseFloat(raw);
+        if (isNaN(num) || num < 0) return;
+        const clamped = Math.min(num, 24);
+        setDailyTargetHours(clamped);
+        try {
+            localStorage.setItem(DAILY_TARGET_KEY, String(clamped));
+        } catch (e) {
+            // ignore
+        }
+    }, []);
+
+    const handleDailyTargetBlur = useCallback(() => {
+        setDailyTargetInput(String(dailyTargetHours));
+    }, [dailyTargetHours]);
+
+    const toggleWorkingDay = useCallback((day) => {
+        setWorkingDays(prev => {
+            const exists = prev.includes(day);
+            const next = exists
+                ? prev.filter(d => d !== day)
+                : [...prev, day].sort((a, b) => a - b);
+            try {
+                localStorage.setItem(WORKING_DAYS_KEY, JSON.stringify(next));
+            } catch (e) {
+                // ignore
+            }
+            return next;
+        });
+    }, []);
+
+    // Load persisted vacation allowance & vacation tags on mount
+    useEffect(() => {
+        try {
+            const rawAllowance = localStorage.getItem(VACATION_ALLOWANCE_KEY);
+            if (rawAllowance !== null) {
+                const parsed = parseFloat(rawAllowance);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    setVacationAllowance(Math.min(parsed, 366));
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const rawVacTags = localStorage.getItem(VACATION_TAGS_KEY);
+            if (rawVacTags !== null) {
+                const parsed = JSON.parse(rawVacTags);
+                if (Array.isArray(parsed)) setVacationTags(parsed);
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const rawStartDate = localStorage.getItem(VACATION_START_DATE_KEY);
+            if (rawStartDate && isValidIsoDate(rawStartDate)) {
+                setVacationStartDate(rawStartDate);
+            }
+        } catch (e) {
+            // ignore
+        }
+        try {
+            const savedShowVac = localStorage.getItem(SHOW_VACATION_KEY);
+            setShowVacation(savedShowVac === 'true');
+        } catch (e) {
+            // ignore
+        }
+        setVacationLoaded(true);
+    }, []);
+
+    // Seed vacation allowance, tags & start date from env defaults when env config changes
+    useEffect(() => {
+        if (!vacationLoaded || !config) return;
+
+        const envAllowanceRaw = Number(config.vacationAllowanceDays);
+        const envAllowance = Number.isFinite(envAllowanceRaw)
+            ? Math.min(Math.max(envAllowanceRaw, 0), 366)
+            : 0;
+        const allowanceSnap = String(envAllowance);
+        try {
+            if (localStorage.getItem(VACATION_ALLOWANCE_ENV_KEY) !== allowanceSnap) {
+                setVacationAllowance(envAllowance);
+                localStorage.setItem(VACATION_ALLOWANCE_KEY, allowanceSnap);
+                localStorage.setItem(VACATION_ALLOWANCE_ENV_KEY, allowanceSnap);
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        const envTags = Array.isArray(config.vacationTags) && config.vacationTags.length > 0
+            ? config.vacationTags
+            : ['vacation'];
+        const tagsSnap = JSON.stringify(envTags);
+        try {
+            if (localStorage.getItem(VACATION_TAGS_ENV_KEY) !== tagsSnap) {
+                setVacationTags(envTags);
+                localStorage.setItem(VACATION_TAGS_KEY, tagsSnap);
+                localStorage.setItem(VACATION_TAGS_ENV_KEY, tagsSnap);
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        const envStart = isValidIsoDate(config.vacationStartDate) ? config.vacationStartDate : '';
+        try {
+            if (localStorage.getItem(VACATION_START_DATE_ENV_KEY) !== envStart) {
+                setVacationStartDate(envStart);
+                localStorage.setItem(VACATION_START_DATE_KEY, envStart);
+                localStorage.setItem(VACATION_START_DATE_ENV_KEY, envStart);
+            }
+        } catch (e) {
+            // ignore
+        }
+    }, [config, vacationLoaded]);
+
+    const toggleShowVacation = useCallback(() => {
+        setShowVacation(prev => {
+            const next = !prev;
+            try {
+                localStorage.setItem(SHOW_VACATION_KEY, String(next));
+            } catch (e) {
+                // ignore
+            }
+            return next;
+        });
+    }, []);
+
+    const updateVacationStartDate = useCallback((raw) => {
+        const val = isValidIsoDate(raw) ? raw : '';
+        setVacationStartDate(val);
+        try {
+            localStorage.setItem(VACATION_START_DATE_KEY, val);
+        } catch (e) {
+            // ignore
+        }
+    }, []);
+
+    const updateVacationAllowance = useCallback((raw) => {
+        const num = parseFloat(raw);
+        const val = isNaN(num) ? 0 : Math.min(Math.max(num, 0), 366);
+        setVacationAllowance(val);
+        try {
+            localStorage.setItem(VACATION_ALLOWANCE_KEY, String(val));
+        } catch (e) {
+            // ignore
+        }
+    }, []);
+
+    const persistVacationTags = useCallback((next) => {
+        try {
+            localStorage.setItem(VACATION_TAGS_KEY, JSON.stringify(next));
+        } catch (e) {
+            // ignore
+        }
+    }, []);
+
+    const addVacationTag = useCallback((raw) => {
+        const name = String(raw || '').trim().replace(/^#/, '').toLowerCase();
+        if (!name) return;
+        setVacationTags(prev => {
+            if (prev.includes(name)) return prev;
+            const next = [...prev, name];
+            persistVacationTags(next);
+            return next;
+        });
+        setVacationInput('');
+    }, [persistVacationTags]);
+
+    const removeVacationTag = useCallback((name) => {
+        setVacationTags(prev => {
+            const next = prev.filter(t => t !== name);
+            persistVacationTags(next);
+            return next;
+        });
+    }, [persistVacationTags]);
+
     // Fetch config on mount
     useEffect(() => {
         fetch('/api/config')
@@ -585,6 +864,8 @@ export default function Home() {
                         excludedRecords={filteredExcludedRecords}
                         showExcluded={showExcluded}
                         config={config}
+                        dailyTargetHours={dailyTargetHours}
+                        workingDays={workingDays}
                         billableTags={billableTags}
                     />
 
@@ -596,6 +877,8 @@ export default function Home() {
                         records={filteredRecords}
                         excludedRecords={filteredExcludedRecords}
                         config={config}
+                        dailyTargetHours={dailyTargetHours}
+                        workingDays={workingDays}
                         billableTags={billableTags}
                         billableTarget={billableTarget}
                         excludedTags={activeExcludedTags}
@@ -605,6 +888,19 @@ export default function Home() {
 
                     {/* Heatmap */}
                     <Heatmap records={filteredRecords} billableTags={billableTags} onHighlight={handleHighlight} />
+
+                    {/* Vacation & Leave Allowance */}
+                    <LeaveBalance
+                        records={records}
+                        visible={showVacation}
+                        vacationAllowance={vacationAllowance}
+                        vacationTags={vacationTags}
+                        startDate={vacationStartDate}
+                        excludedTags={activeExcludedTags}
+                        dailyTargetHours={dailyTargetHours}
+                        preferredYear={(filters.dateFrom || filters.dateTo || '').slice(0, 4)}
+                        onHighlight={handleHighlight}
+                    />
 
                     {/* Entries Table */}
                     <EntriesTable
@@ -673,6 +969,8 @@ export default function Home() {
                         style={{
                             width: '100%',
                             maxWidth: '460px',
+                            maxHeight: 'calc(100vh - 96px)',
+                            overflowY: 'auto',
                             background: 'var(--bg-secondary)',
                             border: '1px solid var(--border-color)',
                             borderRadius: 'var(--radius-lg)',
@@ -701,6 +999,59 @@ export default function Home() {
                                 <button className="btn btn-secondary btn-sm" onClick={toggleTheme}>
                                     {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
                                 </button>
+                            </div>
+                        </section>
+
+                        {/* Work schedule & daily target */}
+                        <section style={{ marginBottom: '22px' }}>
+                            <h3 style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Work Schedule & Target
+                            </h3>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                                Fallback daily target when a day doesn&apos;t specify <code>(Xh!)</code>.
+                                Entries on non-working days have a 0h target. Saved automatically.
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+                                <input
+                                    className="filter-input"
+                                    type="number"
+                                    min="0"
+                                    max="24"
+                                    step="0.1"
+                                    aria-label="Daily target hours"
+                                    value={dailyTargetInput}
+                                    onChange={(e) => handleDailyTargetChange(e.target.value)}
+                                    onBlur={handleDailyTargetBlur}
+                                    style={{ width: '96px' }}
+                                />
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>h / day</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
+                                    {(dailyTargetHours * workingDays.length).toFixed(1)}h / week
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                {WEEKDAY_BUTTONS.map(({ day, label }) => {
+                                    const active = workingDays.includes(day);
+                                    return (
+                                        <button
+                                            key={day}
+                                            type="button"
+                                            onClick={() => toggleWorkingDay(day)}
+                                            aria-pressed={active}
+                                            className={`btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}`}
+                                            style={{
+                                                flex: '1 1 0',
+                                                minWidth: '48px',
+                                                justifyContent: 'center',
+                                                padding: '6px 4px',
+                                                opacity: active ? 1 : 0.65,
+                                            }}
+                                            title={active ? `${label}: working day (click to mark off)` : `${label}: non-working day (0h target)`}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </section>
 
@@ -865,6 +1216,149 @@ export default function Home() {
                                     style={{ width: '110px' }}
                                 />
                                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>% billable</span>
+                            </div>
+                        </section>
+
+                        {/* Vacation & Leave Allowance */}
+                        <section style={{ marginTop: '22px' }}>
+                            <h3 style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                Vacation & Leave Allowance
+                            </h3>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.5 }}>
+                                Annual vacation allowance in days (0 disables it).
+                                Optional start date prorates your first year&apos;s allowance and counts leave from that date onward.
+                            </div>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '8px 12px',
+                                background: 'var(--bg-glass)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: 'var(--radius-sm)',
+                                marginBottom: '10px',
+                            }}>
+                                <div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                                        Vacation Chart
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                        {showVacation
+                                            ? (vacationAllowance > 0
+                                                ? 'Active on dashboard below the heatmap'
+                                                : 'Active — set an annual allowance > 0 below to display')
+                                            : 'Disabled by default — activate to show on dashboard'}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    className={`btn btn-sm ${showVacation ? 'btn-warning' : 'btn-secondary'}`}
+                                    onClick={toggleShowVacation}
+                                    aria-pressed={showVacation}
+                                    style={{ fontSize: '11px', padding: '4px 10px' }}
+                                >
+                                    {showVacation ? '👁️ Active' : '👁️‍🗨️ Disabled'}
+                                </button>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+                                <input
+                                    className="filter-input"
+                                    type="number"
+                                    min="0"
+                                    max="366"
+                                    step="0.5"
+                                    placeholder="0"
+                                    aria-label="Annual vacation allowance in days"
+                                    value={vacationAllowance || ''}
+                                    onChange={(e) => updateVacationAllowance(e.target.value)}
+                                    style={{ width: '110px' }}
+                                />
+                                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>days / year</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+                                <label
+                                    htmlFor="vacation-start-date"
+                                    style={{ fontSize: '12px', color: 'var(--text-secondary)', minWidth: '82px' }}
+                                >
+                                    Start date
+                                </label>
+                                <input
+                                    id="vacation-start-date"
+                                    className="filter-input"
+                                    type="date"
+                                    aria-label="Company start date"
+                                    value={vacationStartDate}
+                                    onChange={(e) => updateVacationStartDate(e.target.value)}
+                                    style={{ flex: '1 1 150px', minWidth: 0 }}
+                                />
+                                {vacationStartDate && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => updateVacationStartDate('')}
+                                        title="Clear start date"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            {vacationAllowance > 0 && (() => {
+                                const currentYear = String(new Date().getFullYear());
+                                const {
+                                    effectiveAllowance,
+                                    yearAllowance,
+                                    isBeforeStart,
+                                    effectiveAsOfMonth,
+                                } = calculateEffectiveVacationAllowance(
+                                    vacationAllowance,
+                                    vacationStartDate,
+                                    currentYear,
+                                );
+                                return (
+                                    <div style={{ fontSize: '12px', color: 'var(--accent-warning)', marginBottom: '10px' }}>
+                                        {isBeforeStart
+                                            ? `Through ${effectiveAsOfMonth}: 0d (starts ${vacationStartDate})`
+                                            : `Through ${effectiveAsOfMonth}: ${effectiveAllowance}d accrued` +
+                                              (yearAllowance !== vacationAllowance
+                                                  ? ` (${yearAllowance}d full ${currentYear} of ${vacationAllowance}d/yr)`
+                                                  : ` of ${vacationAllowance}d/yr`)}
+                                    </div>
+                                );
+                            })()}
+                            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                                <input
+                                    className="filter-input"
+                                    placeholder="Vacation tags (e.g. vacation, pto)"
+                                    value={vacationInput}
+                                    onChange={(e) => setVacationInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            addVacationTag(vacationInput);
+                                        }
+                                    }}
+                                    style={{ flex: 1, minWidth: 0 }}
+                                />
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => addVacationTag(vacationInput)}
+                                >
+                                    Add
+                                </button>
+                            </div>
+                            <div className="filter-chips" style={{ marginBottom: 0 }}>
+                                {vacationTags.length === 0 ? (
+                                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                        No vacation tags
+                                    </span>
+                                ) : (
+                                    vacationTags.map(tag => (
+                                        <span key={tag} className="filter-chip filter-chip-excluded">
+                                            #{tag}
+                                            <button onClick={() => removeVacationTag(tag)}>×</button>
+                                        </span>
+                                    ))
+                                )}
                             </div>
                         </section>
                     </div>
